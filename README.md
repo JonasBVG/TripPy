@@ -1,2 +1,2 @@
 # TripPy
-Module to analyze trip tables and to generate reports of MATSim runs
+Module to analyze trip tables and to generate reports from MATSim runs

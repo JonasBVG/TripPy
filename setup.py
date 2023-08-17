@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
      # Needed to silence warnings (and to be a worthwhile package)
-    name='Measurements',
+    name='trippy',
     url='https://github.com/JonasBVG/TripPy.git',
     author='Jonas Huebner',
     author_email='jonas.huebner@bvg.de',

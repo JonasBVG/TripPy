@@ -16,7 +16,21 @@ class TripTable():
         self.endtime = endtime
         self.routedistance = routedistance
         self.travelmode = travelmode
-    
+
+    def create_DataFrame(self):
+
+        df = pd.DataFrame()
+        df['trip_id'] = self.id
+        df['travel_mode'] = self.travelmode
+        df['start_point'] = self.start
+        df['end_point'] = self.end
+        df['start_time'] = self.starttime
+        df['end_time'] = self.endtime
+        df['duration'] = df['start_time'] - df['end_time']
+        df['routed_distance'] = self.routedistance
+
+        return df
+
     def get_ModalSplit(self):
         df = self.travelmode.value_counts().reset_index()
         df.columns = ['Verkehrsmittel', 'Anzahl']

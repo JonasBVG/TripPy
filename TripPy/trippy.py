@@ -26,7 +26,7 @@ class TripTable():
         df['end_point'] = self.end
         df['start_time'] = self.starttime
         df['end_time'] = self.endtime
-        df['duration'] = df['start_time'] - df['end_time']
+        df['duration'] = df['end_time'] - df['start_time']
         df['routed_distance'] = self.routedistance
 
         return df

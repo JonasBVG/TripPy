@@ -67,7 +67,11 @@ class TripTable():
             fig.update_layout()
         return fig
     
-    
+    def plot_trip_distance_distribution(self, bins=20):
+      
+      df = self.create_DataFrame()
+      fig = px.histogram(df, x="routed_distance", nbins=bins)
+      fig.show()
 
     
 

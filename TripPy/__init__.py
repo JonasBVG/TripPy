@@ -1,4 +1,4 @@
-from . import trippy.TripTable
+from .trippy import TripTable
 
 create_DataFrame = TripTable.create_DataFrame
 get_ModalSplit = TripTable.get_ModalSplit

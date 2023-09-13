@@ -1,0 +1,144 @@
+{
+    "trip_table": [
+        {
+            "name": "trip_id",
+            "type": "str",
+            "required": false,
+            "description": "unique trip identifier. Will be added automatically if not provided"
+        },
+        {
+            "name": "person_id",
+            "type": "str",
+            "required": false,
+            "description": "person identifier"
+        },
+        {
+            "name": "all_modes",
+            "type": "list",
+            "required": false,
+            "description": "list of all modes used on a specific trip"
+        },
+        {
+            "name": "main_mode",
+            "type": "str",
+            "required": false,
+            "description": "name of the main mode used on a specific trip"
+        },
+        {
+            "name": "from_act_type",
+            "type": "str",
+            "required": false,
+            "description": "name of activity prior to trip"
+        },
+        {
+            "name": "to_act_type",
+            "type": "str",
+            "required": false,
+            "description": "name of activity after trip"
+        },
+        {
+            "name": "start_time",
+            "type": "int",
+            "required": false,
+            "description": "time of trip start in seconds from 0:00"
+        },
+        {
+            "name": "end_time",
+            "type": "int",
+            "required": false,
+            "description": "time of trip end in seconds from 0:00"
+        },
+        {
+            "name": "beeline_distance",
+            "type": "float",
+            "required": false,
+            "description": "beeline distance between start and end point in meters"
+        },
+        {
+            "name": "routed_distance",
+            "type": "float",
+            "required": false,
+            "description": "real distance (on a network) in meters"
+        },
+        {
+            "name": "travel_time",
+            "type": "int",
+            "required": false,
+            "description": "travel time in seconds"
+        },
+        {
+            "name": "waiting_time",
+            "type": "int",
+            "required": false,
+            "description": "waiting time in seconds"
+        },
+        {
+            "name": "access_time",
+            "type": "int",
+            "required": false,
+            "description": "time spent egressing from the first vehicle in seconds"
+        },
+        {
+            "name": "access_distance",
+            "type": "int",
+            "required": false,
+            "description": "distance travelled egressing from the first vehicle in meters"
+        },
+        {
+            "name": "access_waiting_time",
+            "type": "int",
+            "required": false,
+            "description": "waiting time during egress in seconds"
+        },
+        {
+            "name": "egress_time",
+            "type": "int",
+            "required": false,
+            "description": "time spent accessing the first vehicle in seconds"
+        },
+        {
+            "name": "egress_distance",
+            "type": "int",
+            "required": false,
+            "description": "distance travelled accessing the first vehicle in meters"
+        },
+        {
+            "name": "egress_waiting_time",
+            "type": "int",
+            "required": false,
+            "description": "waiting time during access in seconds"
+        },
+        {
+            "name": "from_x",
+            "type": "float",
+            "required": false,
+            "description": "x coordinate of the trip starting point. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "from_y",
+            "type": "float",
+            "required": false,
+            "description": "y coordinate of the trip starting point. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "to_x",
+            "type": "float",
+            "required": false,
+            "description": "x coordinate of the trip end point. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "to_y",
+            "type": "float",
+            "required": false,
+            "description": "y coordinate of the trip end point. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "legs_count",
+            "type": "int",
+            "required": false,
+            "description": "number of legs"
+        }
+    ],
+    "leg_table": [],
+    "link_table": []
+}

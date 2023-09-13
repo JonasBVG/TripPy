@@ -1,78 +1,89 @@
 import pandas as pd
-import geopandas as gpd
-import numpy as np
-from shapely.geometry import Point, LineString
-import plotly.express as px
+import json
 
 
-class TripTable():
-    def __init__(self, id, start,end,geometry, starttime, endtime, routedistance, travelmode, number_of_stages=None):
-        
-        self.id = id
-        self.start= start
-        self.end = end
-        self.geometry = geometry
-        self.starttime = starttime
-        self.endtime = endtime
-        self.routedistance = routedistance
-        self.travelmode = travelmode
+class Scenario:
+    """
+    Class that models a transport planning scenario that holds one or more different
+    (geo)pandas (Geo)DataFrames containing data on trips, legs and/or network links
+    """
 
-    def create_DataFrame(self):
+    def __init__(
+        self,
+        code: str = None,
+        name: str = "my scenario",
+        description: str = None,
+        trip_table: pd.DataFrame = None,
+        leg_table: pd.DataFrame = None,
+        link_table: pd.DataFrame = None,
+    ):
+        # TODO: Argument type checking
+        # TODO: Docstring
 
-        df = pd.DataFrame()
-        df['trip_id'] = self.id
-        df['travel_mode'] = self.travelmode
-        df['start_point'] = self.start
-        df['end_point'] = self.end
-        df['start_time'] = self.starttime
-        df['end_time'] = self.endtime
-        df['duration'] = df['end_time'] - df['start_time']
-        df['routed_distance'] = self.routedistance
+        self.code = code
+        self.name = name
+        self.description = description
 
-        return df
+        with open("tables_specification.json") as file:
+            self.tables_specification = json.load(file)
+        self.__trip_table = None
+        self.__leg_table = None
+        self.__link_table = None
 
-    def get_ModalSplit(self):
-        df = self.travelmode.value_counts().reset_index()
-        df.columns = ['Verkehrsmittel', 'Anzahl']
-        return df
-    
-    def set_Geometry(self, geometry):
-        self.geometry = geometry
+        if trip_table:
+            self.add_trip_table(trip_table)
+        if leg_table:
+            self.add_leg_table(leg_table)
+        if link_table:
+            self.add_link_table(link_table)
 
-    def make_LineString(self):
-        df=pd.DataFrame(columns=['start' , 'end'])
-        df['start'] = self.start
-        df['end'] = self.end
-        df['line'] = df.apply(lambda x: LineString([x.start, x.end]),axis=1)
-        self.geometry = df.line
+    def add_trip_table(self, trip_table: pd.DataFrame):
+        """
+        Add a trip table to the scenario
+        ---
+        trip_table: a pandas DataFrame containing at least one trip
+        """
+        # TODO: Implement column type checking
 
-    def plot_ModalSplit(self, style):
-        df = self.get_ModalSplit()
-        if style == 'pie':
-            fig = px.pie(df, values='Anzahl', names='Verkehrsmittel', title='Modal-Split')
-            fig.update_layout(height=700, width=1000,
-                font=dict(
-                    family="Arial",
-                    size=20,
-                    color="Black"))
-            fig.update_layout()
+        cols_existing = [
+            col["name"]
+            for col in self.tables_specification["trip_table"]
+            if col["name"] in list(trip_table.columns)
+        ]
+        cols_not_existing = [
+            col["name"]
+            for col in self.tables_specification["trip_table"]
+            if col["name"] not in list(trip_table.columns)
+        ]
+        cols_not_used = [
+            col
+            for col in list(trip_table.columns)
+            if col not in [c["name"] for c in self.tables_specification["trip_table"]]
+        ]
+        if len(cols_existing) == 0 or trip_table.size == 0:
+            print(list(trip_table.columns))
+            raise ValueError(
+                "`trip_table` DataFrame does not contain any recognized columns or has no entries"
+            )
+        if cols_not_used:
+            raise UserWarning(
+                f"The provided `trip_table` contains the following columns that are not recognized and will not be used:\n{cols_not_used}"
+            )
 
-        elif style == 'bar':
-            fig = px.bar(df, x='Verkehrsmittel', y = 'Anzahl', title='Anzahl der Wege pro Verkehrsmittel')
-            fig.update_layout(height=700, width=1000,
-                font=dict(
-                    family="Arial",
-                    size=20,
-                    color="Black"))
-            fig.update_layout()
-        return fig
-    
-    def plot_trip_distance_distribution(self, bins=20):
-      
-      df = self.create_DataFrame()
-      fig = px.histogram(df, x="routed_distance", nbins=bins)
-      fig.show()
+        self.__trip_table = trip_table
 
-    
+        if "trip_id" in cols_not_existing:
+            self.__trip_table["trip_id"] = self.__trip_table.index.astype(str)
 
-        
+    def get_trip_table(self):
+        return self.__trip_table
+
+
+
+# TESTS
+if __name__ == "__main__":
+    myscen = Scenario()
+    thedf = pd.DataFrame(data={"person_id": ["1", "2"]})
+    print(thedf)
+    myscen.add_trip_table(thedf)
+    print(myscen.get_trip_table())

@@ -20,14 +20,18 @@ class Scenario:
     ):
         # TODO: Argument type checking
         # TODO: Docstring
-        # TODO: Implement settings
+        # TODO: Implement settings better
         # TODO: Implement mode dict
 
         self.code = code
         self.name = name
         self.description = description
 
-        self.__settings = {"default_time_agg_interval": 60}
+        self.__settings = {
+            "default_time_agg_interval": 60,
+            # TODO: replace with ".*"
+            "legs_table_person_id_filter": "^((?!^pt).)*$", # only selects person_ids that do not start with "pt"
+        }
 
         with open("tables_specification.json") as file:
             self.__tables_specification = json.load(file)
@@ -37,18 +41,18 @@ class Scenario:
 
         self.__linked_df = None
 
-        if trips_df:
+        if trips_df is not None:
             self.add_trips_df(trips_df)
-        if legs_df:
+        if legs_df is not None:
             self.add_legs_df(legs_df)
-        if links_df:
+        if links_df is not None:
             self.add_links_df(links_df)
 
     def __check_specification_compliance(
         self, df: pd.DataFrame, table_name: str
     ) -> bool:
         """
-        Checks a given `DataFrame` for compliance with table specifications defined in `tables_specification.json`
+        Checks a given `DataFrame` for compliance with the table specifications defined in `tables_specification.json`
         """
         # TODO: Implement column type checking
         # TODO: Implement column type casting
@@ -73,7 +77,7 @@ class Scenario:
                 f"`{table_name}` DataFrame does not contain any recognized columns or has no entries"
             )
         if cols_not_used:
-            raise UserWarning(
+            print(
                 f"The provided `{table_name}` contains the following columns that are not recognized and will not be used:\n{cols_not_used}"
             )
 
@@ -144,7 +148,7 @@ class Scenario:
 
     def __generate_linked_df(self) -> None:
         """
-        Generate a linked df consisting of trips, legs, links. Not sure if this will be used
+        Generate a linked df consisting of trips, legs, links. Not sure if this is needed / a good idea
         ---
         """
         raise NotImplementedError
@@ -154,21 +158,41 @@ class Scenario:
         Get the total number of trips
         ---
         """
-        raise NotImplementedError
+        # TODO: Add ability to filter spatially for a specific area, start/end.
+        # Maybe create something like self.analysis_areas as GeoDataFrame of areas (Polygons) and specify only area name for this method to filter for
+
+        return self.__trips_df.size
 
     def get_n_persons(self) -> int:
         """
         Get the number of unique persons
         ---
         """
-        raise NotImplementedError
+        return self.__trips_df["person_id"].unique().size
 
     def get_person_km(self) -> float:
         """
         Get the total number of person kilometers performed
         ---
         """
-        raise NotImplementedError
+
+        # TODO: Add check if self.__legs_df exists, otherwise raise Error, legs_df must be provided
+
+        # filter out ptDriverAgents
+        pkm = (
+            self.__legs_df["person_id"]
+            # match a regex string defined in settings(e.g. no ptDriverAgents) 
+            .str.match(self.__settings["legs_table_person_id_filter"])["routed_distance"] 
+            .sum()
+        )
+
+        return pkm
+
+    def __add_time_bins(self, df: pd.DataFrame, time_interval: int|None=None):
+        if time_interval is None:
+            time_interval = self.__settings["default_time_agg_interval"]
+
+        return df.assign(time_bin=lambda x: x.start_time//(time_interval*60))
 
     def get_trips_day(self, time_interval: int = 60) -> pd.DataFrame:
         """
@@ -178,10 +202,16 @@ class Scenario:
         - `time_interval`: number of minutes one time bin consists of
 
         Columns of `DataFrame` returned:
-        - `time_index`: Index of the time interval bin. Example: If `time_interval` was set to 60 mins, there will be indices 0-23
+        - `time_index`: Index of the time interval bin. Example: if `time_interval` was set to 60 mins, there will be indices 0-23
         - `n`: Number of trips starting in this time bin
         """
-        raise NotImplementedError
+
+        df_trips_day = (self.__add_time_bins(self.__trips_df, time_interval)
+                        .groupby("time_bin")
+                        # .count()
+                        .size().reset_index(name='n')
+                        )
+        return df_trips_day
 
     def get_modal_split(self, type: str = "volume") -> pd.DataFrame:
         """
@@ -210,7 +240,7 @@ class Scenario:
 
         Columns of DataFrame returned:
         - `mode`: mode of transport
-        - `time_index`: Index of the time interval bin. Example: If `time_interval` = 60 mins, there will be indices 0-23
+        - `time_index`: Index of the time interval bin. Example: if `time_interval` = 60 mins, there will be indices 0-23
         - `n`: Number of trips starting in this time bin OR Number of person kilometers travelled on trips starting in this time bin
         """
         # This should probably not function as described above, but should actually count the person kilometers in the time bin, not of trips starting in this time bin
@@ -249,7 +279,7 @@ class Scenario:
 
         Columns of `DataFrame` returned:
         - `mode`: mode of transport
-        - `time_index`: Index of the time interval bin. Example: If `time_interval` = 60 mins, there will be indices 0-23
+        - `time_index`: Index of the time interval bin. Example: if `time_interval` = 60 mins, there will be indices 0-23
         - `n`: Number of vehicles entering at least one link in the respective time bin
         """
         raise NotImplementedError
@@ -307,7 +337,7 @@ class Scenario:
         Columns of `GeoDataFrame` returned:
         - `zone_id`: id of the respective zone
         - `mode`: mode of transport. If `distinguish_modes` is set to `False` this column will contain `nan`s
-        - `time_index`: Index of the time interval bin. Example: If `time_interval` = 60 mins, there will be indices 0-23
+        - `time_index`: Index of the time interval bin. Example: if `time_interval` = 60 mins, there will be indices 0-23
         - `n_origin`: Number of trips originating from this zone in the respective time bin
         - `n_destination`: Number of trips ending in this zone in the respective time bin
         """
@@ -374,10 +404,32 @@ class Scenario:
         raise NotImplementedError
 
 
-# TESTS
-if __name__ == "__main__":
-    myscen = Scenario()
-    thedf = pd.DataFrame(data={"person_id": ["1", "2"]})
-    print(thedf)
-    myscen.add_trips_df(thedf)
-    print(myscen.get_trips_df())
+def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
+    if table_type == "tripTable":
+        rename_dict = {
+            "id": "trip_id",
+            "personId": "person_id",
+            "mainMode": "main_mode",
+            "fromActType": "from_act_type",
+            "toActType": "to_act_type",
+            "tripStartTime": "start_time",
+            "tripEndTime": "end_time",
+            "beelinDistance": "beeline_distance",
+            "routedDistance": "routed_distance",
+            "travelTime": "travel_time",
+            "waitingTime": "waiting_time",
+            "accessTime": "access_time",
+            "accessDistance": "access_distance",
+            "accessWaitingTime": "access_waiting_time",
+            "egressTime": "egress_time",
+            "egressDistance": "egress_distance",
+            "egressWaitingTime": "egress_waiting_time",
+            "fromX": "from_x",
+            "fromY": "from_y",
+            "toX": "to_x",
+            "toY": "to_y",
+            "numStages": "legs_count"
+        }
+    else:
+        raise NotImplementedError
+    return df.rename(columns=rename_dict)

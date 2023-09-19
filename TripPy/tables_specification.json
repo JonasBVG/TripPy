@@ -76,13 +76,13 @@
             "name": "access_time",
             "type": "int",
             "required": false,
-            "description": "time spent egressing from the first vehicle in seconds"
+            "description": "time spent accessing the first vehicle in seconds"
         },
         {
             "name": "access_distance",
             "type": "int",
             "required": false,
-            "description": "distance travelled egressing from the first vehicle in meters"
+            "description": "distance travelled accessing the first vehicle in meters"
         },
         {
             "name": "access_waiting_time",
@@ -94,19 +94,13 @@
             "name": "egress_time",
             "type": "int",
             "required": false,
-            "description": "time spent accessing the first vehicle in seconds"
+            "description": "time spent egressing from the first vehicle in seconds"
         },
         {
             "name": "egress_distance",
             "type": "int",
             "required": false,
-            "description": "distance travelled accessing the first vehicle in meters"
-        },
-        {
-            "name": "egress_waiting_time",
-            "type": "int",
-            "required": false,
-            "description": "waiting time during access in seconds"
+            "description": "distance travelled egressing from the first vehicle in meters"
         },
         {
             "name": "from_x",

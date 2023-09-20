@@ -159,6 +159,12 @@
             "description": "name of the mode used"
         },
         {
+            "name": "mode",
+            "type": "str",
+            "required": false,
+            "description": "name of the pt line used"
+        },
+        {
             "name": "from_act_type",
             "type": "str",
             "required": false,

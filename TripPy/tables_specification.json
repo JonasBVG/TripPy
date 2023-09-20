@@ -133,7 +133,104 @@
             "description": "number of legs"
         }
     ],
-    "legs_df": [],
+    "legs_df": [
+        {
+            "name": "person_id",
+            "type": "str",
+            "required": false,
+            "description": "person identifier"
+        },
+        {
+            "name": "trip_id",
+            "type": "str",
+            "required": true,
+            "description": "corresponding trip identifier"
+        },
+        {
+            "name": "leg_id",
+            "type": "str",
+            "required": false,
+            "description": "unique leg identifier. Will be added automatically if not provided"
+        },
+        {
+            "name": "mode",
+            "type": "str",
+            "required": false,
+            "description": "name of the mode used"
+        },
+        {
+            "name": "from_act_type",
+            "type": "str",
+            "required": false,
+            "description": "name of activity prior to leg"
+        },
+        {
+            "name": "to_act_type",
+            "type": "str",
+            "required": false,
+            "description": "name of activity after leg"
+        },
+        {
+            "name": "start_time",
+            "type": "int",
+            "required": false,
+            "description": "time of trip start in seconds from 0:00"
+        },
+        {
+            "name": "end_time",
+            "type": "int",
+            "required": false,
+            "description": "time of trip end in seconds from 0:00"
+        },
+        {
+            "name": "beeline_distance",
+            "type": "float",
+            "required": false,
+            "description": "beeline distance between start and end point in meters"
+        },
+        {
+            "name": "routed_distance",
+            "type": "float",
+            "required": false,
+            "description": "real distance (on a network) in meters"
+        },
+        {
+            "name": "travel_time",
+            "type": "int",
+            "required": false,
+            "description": "travel time in seconds"
+        },
+        {
+            "name": "waiting_time",
+            "type": "int",
+            "required": false,
+            "description": "waiting time in seconds"
+        },
+        {
+            "name": "from_x",
+            "type": "float",
+            "required": false,
+            "description": "x coordinate of the leg starting point. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "from_y",
+            "type": "float",
+            "required": false,
+            "description": "y coordinate of the leg starting point. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "to_x",
+            "type": "float",
+            "required": false,
+            "description": "x coordinate of the leg end point. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "to_y",
+            "type": "float",
+            "required": false,
+            "description": "y coordinate of the leg end point. Coordinate reference system: EPSG:25833"
+        }
+    ],
     "links_df": [],
     "drt_df": []
 }

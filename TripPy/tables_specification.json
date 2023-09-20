@@ -159,7 +159,7 @@
             "description": "name of the mode used"
         },
         {
-            "name": "mode",
+            "name": "line_id",
             "type": "str",
             "required": false,
             "description": "name of the pt line used"

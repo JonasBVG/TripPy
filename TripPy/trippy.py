@@ -7,6 +7,9 @@ import plotly.express as px
 import plotly.io as pio
 from jinja2 import Environment, FileSystemLoader
 
+# In case VS Code's semantic syntax highlighting (i.e. coloring module names, methods etc.) does not work anymore,
+# try switching to an a few weeks older version of the Pylance extension. This worked for me.
+
 
 class Scenario:
     """
@@ -14,8 +17,7 @@ class Scenario:
     `(geo)pandas` `(Geo)DataFrames` containing data on trips, legs and/or network links
     """
 
-    # TODO: Add methods for data to be used for visualizations like heatmaps and linestring stuff
-    #       For that we need O(D) data that is not aggregated but includes precise coordinates
+    # TODO: Add methods for data to be used for visualizations like heatmaps and linestring stuff (precise coordinates)
     # TODO: Add ability to add a matsim timetable for the line related methods
 
     def __init__(
@@ -26,7 +28,7 @@ class Scenario:
         trips_df: pd.DataFrame | None = None,
         legs_df: pd.DataFrame | None = None,
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
-        network_df: gpd.GeoDataFrame | None = None
+        network_df: gpd.GeoDataFrame | None = None,
     ):
         # TODO: Argument type checking
         # TODO: Docstring
@@ -36,9 +38,9 @@ class Scenario:
         self.name = name
         self.description = description
 
-        self.__settings = {
+        self._settings = {
             "default_time_agg_interval": 60,
-            # TODO: for release: replace with ".*"
+            "drt_mode": "drt",
             "pt_modes": [
                 "100",
                 "300",
@@ -54,6 +56,7 @@ class Scenario:
                 "BVU20",
                 "BVF100",
             ],
+            # TODO: for release: replace with ".*"
             "legs_table_person_id_filter": "^((?!^pt).)*$",  # only selects person_ids that do not start with "pt"
             # TODO: for release: replace with {}
             "mode_aggregation_rules": {
@@ -74,12 +77,12 @@ class Scenario:
         }
 
         with open("tables_specification.json") as file:
-            self.__tables_specification = json.load(file)
-            
-        self.__trips_df = None
-        self.__legs_df = None
-        self.__links_df = None
-        self.__network_df = None
+            self._tables_specification = json.load(file)
+
+        self._trips_df: pd.DataFrame = None
+        self._legs_df: pd.DataFrame = None
+        self._links_df: pd.DataFrame | gpd.GeoDataFrame = None
+        self._network_df: gpd.GeoDataFrame = None
 
         if trips_df is not None:
             self.add_data(trips_df=trips_df)
@@ -102,51 +105,62 @@ class Scenario:
         """
 
         for key, value in kwargs.items():
-            if key == "trips_df" and self.__check_specification_compliance(value, "trips_df"):
-                self.__trips_df = value
-                if "trip_id" not in list(self.__trips_df.columns):
-                    self.__trips_df["trip_id"] = self.__trips_df.index.astype(str)
+            if key == "trips_df" and self._check_specification_compliance(
+                value, "trips_df"
+            ):
+                self._trips_df = value
+                if "trip_id" not in list(self._trips_df.columns):
+                    self._trips_df["trip_id"] = self._trips_df.index.astype(str)
 
-            elif key == "legs_df" and self.__check_specification_compliance(value, "legs_df"):
-                self.__legs_df = value
-                if "leg_id" not in list(self.__legs_df.columns):
-                    self.__legs_df["leg_id"] = self.__legs_df.index.astype(str)
+            elif key == "legs_df" and self._check_specification_compliance(
+                value, "legs_df"
+            ):
+                self._legs_df = value
+                if "leg_id" not in list(self._legs_df.columns):
+                    self._legs_df["leg_id"] = self._legs_df.index.astype(str)
+                if "leg_number" not in list(self._legs_df.columns):
+                    self._legs_df["leg_number"] = (
+                        self._legs_df.groupby("trip_id").cumcount() + 1
+                    )
 
-            elif key == "links_df" and self.__check_specification_compliance(value, "links_df"):
-                self.__links_df = value
-                if "link_id" not in list(self.__links_df.columns):
-                    self.__links_df["link_id"] = self.__links_df.index.astype(str)
+            elif key == "links_df" and self._check_specification_compliance(
+                value, "links_df"
+            ):
+                self._links_df = value
+                if "link_id" not in list(self._links_df.columns):
+                    self._links_df["link_id"] = self._links_df.index.astype(str)
 
-            elif key == "network_df" and self.__check_specification_compliance(value, "network_df"):
-                self.__network_df = value
-            
+            elif key == "network_df" and self._check_specification_compliance(
+                value, "network_df"
+            ):
+                self._network_df = value
+
             else:
                 raise TypeError(f"Unrecognized argument: {key}")
-
 
     def get_trips_df(self) -> pd.DataFrame:
         """
         Get the trips `DataFrame` stored in the scenario
         ---
         """
-        self.__require_table("trips_df")
-        return self.__trips_df
+        self._require_table("trips_df")
+        return self._trips_df
 
     def get_legs_df(self) -> pd.DataFrame:
         """
         Get the legs `DataFrame` stored in the scenario
         ---
         """
-        self.__require_table("legs_df")
-        return self.__legs_df
+        self._require_table("legs_df")
+        return self._legs_df
 
     def get_links_df(self) -> gpd.GeoDataFrame:
         """
         Get the links `DataFrame` stored in the scenario
         ---
         """
-        self.__require_table("links_df")
-        return self.__links_df
+        self._require_table("links_df")
+        return self._links_df
 
     def get_n_trips(self) -> int:
         """
@@ -156,9 +170,9 @@ class Scenario:
         # TODO: Add ability to filter spatially for a specific area, start/end.
         # Maybe create something like self.analysis_areas as GeoDataFrame of areas (Polygons) and specify only area name for this method to filter for
 
-        self.__require_table("trips_df")
+        self._require_table("trips_df")
 
-        return self.__trips_df.shape[0]
+        return self._trips_df.shape[0]
 
     def get_n_persons(self) -> int:
         """
@@ -166,9 +180,9 @@ class Scenario:
         ---
         """
 
-        self.__require_table("trips_df", ["person_id"])
+        self._require_table("trips_df", ["person_id"])
 
-        return self.__trips_df["person_id"].unique().size
+        return self._trips_df["person_id"].unique().size
 
     def get_person_km(self) -> float:
         """
@@ -176,14 +190,14 @@ class Scenario:
         ---
         """
 
-        self.__require_table("legs_df", ["person_id", "routed_distance"])
+        self._require_table("legs_df", ["person_id", "routed_distance"])
 
         # filter out ptDriverAgents
         pkm = (
-            self.__legs_df["routed_distance"]
-            # //[self.__legs_df["person_id"]
+            self._legs_df["routed_distance"]
+            # //[self._legs_df["person_id"]
             # match a regex string defined in settings(e.g. no ptDriverAgents)
-            # // .str.match(self.__settings["legs_table_person_id_filter"])][
+            # // .str.match(self._settings["legs_table_person_id_filter"])][
             # //     "routed_distance"
             # // ]
             .sum()
@@ -206,10 +220,10 @@ class Scenario:
         - `n`: number of trips starting in this time bin
         """
 
-        self.__require_table("trips_df")
+        self._require_table("trips_df")
 
         df_trips_day = (
-            self.__add_time_indices(self.__trips_df, time_interval, time_col)
+            self._add_time_indices(self._trips_df, time_interval, time_col)
             .groupby("time_index")
             .size()
             .reset_index(name="n")
@@ -236,15 +250,15 @@ class Scenario:
         """
 
         if split_type == "volume":
-            self.__require_table("trips_df", ["main_mode"])
+            self._require_table("trips_df", ["main_mode"])
 
-            df_filtered = self.__trips_df[
-                ~self.__trips_df["main_mode"].isin(exclude_modes)
+            df_filtered = self._trips_df[
+                ~self._trips_df["main_mode"].isin(exclude_modes)
             ]
 
             if agg_modes:
                 df_filtered["main_mode"] = df_filtered["main_mode"].replace(
-                    self.__settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rules"]
                 )
 
             df_split = (
@@ -255,13 +269,13 @@ class Scenario:
                 .assign(prc=lambda x: (x["n"] / x["n"].sum()))
             )
         elif split_type == "performance":
-            self.__require_table("legs_df", ["mode"])
+            self._require_table("legs_df", ["mode"])
 
-            df_filtered = self.__legs_df[~self.__legs_df["mode"].isin(exclude_modes)]
+            df_filtered = self._legs_df[~self._legs_df["mode"].isin(exclude_modes)]
 
             if agg_modes:
                 df_filtered["mode"] = df_filtered["mode"].replace(
-                    self.__settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rules"]
                 )
 
             df_split = (
@@ -306,19 +320,19 @@ class Scenario:
         # TODO: performance
 
         if split_type == "volume":
-            self.__require_table("trips_df", ["main_mode"])
+            self._require_table("trips_df", ["main_mode"])
 
-            df_filtered = self.__trips_df[
-                ~self.__trips_df["main_mode"].isin(exclude_modes)
+            df_filtered = self._trips_df[
+                ~self._trips_df["main_mode"].isin(exclude_modes)
             ]
 
             if agg_modes:
                 df_filtered["main_mode"] = df_filtered["main_mode"].replace(
-                    self.__settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rules"]
                 )
 
             df_split = (
-                self.__add_time_indices(
+                self._add_time_indices(
                     df_filtered,
                     time_interval,
                     time_col,
@@ -352,13 +366,13 @@ class Scenario:
 
         # TODO: filter out ptDriverAgents
 
-        self.__require_table("links_df", ["vehicle_id", "mode"])
+        self._require_table("links_df", ["vehicle_id", "mode"])
 
-        df_filtered = self.__links_df[~self.__links_df["mode"].isin(exclude_modes)]
+        df_filtered = self._links_df[~self._links_df["mode"].isin(exclude_modes)]
 
         if agg_modes:
             df_filtered["mode"] = df_filtered["mode"].replace(
-                self.__settings["mode_aggregation_rules"]
+                self._settings["mode_aggregation_rules"]
             )
 
         df_veh_km = (
@@ -380,31 +394,23 @@ class Scenario:
         - `median`: median number of minutes
         - `min`: minimum number of minutes
         - `max`: minimum number of minutes
-        - `p5`: fifth percentile
-        - `p95`: ninety-fifth percentile
+        - `p_5`: fifth percentile
+        - `p_95`: ninety-fifth percentile
         - `std`: standard deviation
         """
 
         # TODO: travel time stats per mode!
 
-        self.__require_table("trips_df", ["travel_time"])
+        self._require_table("trips_df", ["travel_time"])
 
         # Melt the DataFrame to stack travel_parts into rows
-        df_ttime = (
-            self.__trips_df.melt(
-                id_vars=["trip_id"], var_name="travel_part", value_name="minutes"
-            )
-            .groupby("travel_part")
-            .agg(
-                mean=("minutes", "mean"),
-                median=("minutes", "median"),
-                min=("minutes", "min"),
-                max=("minutes", "max"),
-                percentile_5=("minutes", lambda x: np.percentile(x, 5)),
-                percentile_95=("minutes", lambda x: np.percentile(x, 95)),
-                std=("minutes", "std"),
-            )
-            .reset_index()
+        df_ttime = Scenario.calc_descriptive_statistics(
+            self._trips_df.melt(
+                id_vars=["trip_id"],
+                var_name="travel_part",
+                value_name="minutes",
+            ).groupby("travel_part"),
+            "minutes",
         )
 
         return df_ttime
@@ -427,17 +433,17 @@ class Scenario:
         - `n`: Number of vehicles entering at least one link in the respective time bin
         """
 
-        self.__require_table("links_df", ["vehicle_id", "mode"])
+        self._require_table("links_df", ["vehicle_id", "mode"])
 
-        df_filtered = self.__links_df[~self.__links_df["main_mode"].isin(exclude_modes)]
+        df_filtered = self._links_df[~self._links_df["main_mode"].isin(exclude_modes)]
 
         if agg_modes:
             df_filtered["main_mode"] = df_filtered["main_mode"].replace(
-                self.__settings["mode_aggregation_rules"]
+                self._settings["mode_aggregation_rules"]
             )
 
         df_veh = (
-            self.__add_time_indices(
+            self._add_time_indices(
                 df_filtered,
                 time_interval=time_interval,
                 time_col="link_enter_time",
@@ -504,17 +510,17 @@ class Scenario:
         - `n_origin`: Number of trips originating from this zone
         - `n_destination`: Number of trips ending in this zone
         """
-        #! NOT TESTED YET
+        # NOT TESTED YET
         # TODO: Consider renaming agg_gdf to something like "zones" or "zones_gdf"
 
-        self.__require_table("trips_df", ["from_x", "from_y", "to_x", "to_y"])
+        self._require_table("trips_df", ["from_x", "from_y", "to_x", "to_y"])
 
         # Convert df with point coordinates to actual Points gdf
         gdf_trips = gpd.GeoDataFrame(
-            self.__trips_df,
+            self._trips_df,
             geometry=gpd.points_from_xy(
-                self.__trips_df["from_x" if direction == "origin" else "to_x"],
-                self.__trips_df["from_y" if direction == "origin" else "to_y"],
+                self._trips_df["from_x" if direction == "origin" else "to_x"],
+                self._trips_df["from_y" if direction == "origin" else "to_y"],
                 crs="EPSG:25833",
             ),
         )
@@ -527,27 +533,41 @@ class Scenario:
 
         # Count trips per zone
         if distinguish_modes:
-            self.__require_table("trips_df", ["main_mode"])
+            self._require_table("trips_df", ["main_mode"])
 
             # if the pt trips should be filtered for specific pt lines
             if pt_lines is not None:
-                self.__require_table("legs_df", ["line_id"])
-                assert type(self.__settings["pt_modes"]) == list and len(self.__settings["pt_modes"]) > 0, "To use this functionality, please set `pt_modes` in settings first"
+                self._require_table("legs_df", ["line_id"])
+                assert (
+                    isinstance(self._settings["pt_modes"], list)
+                    and len(self._settings["pt_modes"]) > 0
+                ), "To use this functionality, please set `pt_modes` in settings first"
 
                 # filter for trips first that have a non-pt main_mode
-                trips_non_pt = joined[~joined["main_mode"].isin(self.__settings["pt_modes"])]
+                trips_non_pt = joined[
+                    ~joined["main_mode"].isin(self._settings["pt_modes"])
+                ]
                 # find legs with one of the line_ids to filter for and get corresponding trip ids
-                trip_ids_with_pt_lines = self.__legs_df[self.__legs_df["line_id"].isin(pt_lines)]["trip_id"].unique()
+                trip_ids_with_pt_lines = self._legs_df[
+                    self._legs_df["line_id"].isin(pt_lines)
+                ]["trip_id"].unique()
                 # final filter
-                trips_filtered = pd.concat([trips_non_pt, joined[joined["trip_id"].isin(trip_ids_with_pt_lines)]])
+                trips_filtered = pd.concat(
+                    [
+                        trips_non_pt,
+                        joined[joined["trip_id"].isin(trip_ids_with_pt_lines)],
+                    ]
+                )
 
-                trips_filtered = trips_filtered[~trips_filtered["main_mode"].isin(exclude_modes)]
+                trips_filtered = trips_filtered[
+                    ~trips_filtered["main_mode"].isin(exclude_modes)
+                ]
             else:
                 trips_filtered = joined
 
             if agg_modes:
                 trips_filtered["main_mode"] = trips_filtered["main_mode"].replace(
-                    self.__settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rules"]
                 )
 
             counts = (
@@ -559,7 +579,8 @@ class Scenario:
 
         else:
             counts = (
-                joined["zone_id"].groupby("zone_id")
+                joined["zone_id"]
+                .groupby("zone_id")
                 .size()
                 .reset_index(name="all modes")
             )
@@ -656,7 +677,26 @@ class Scenario:
         # get links a line travels on as gdf
         raise NotImplementedError
 
-    def __check_specification_compliance(
+    @staticmethod
+    def calc_descriptive_statistics(
+        df: pd.DataFrame | gpd.GeoDataFrame, value_col: str
+    ) -> pd.DataFrame | gpd.GeoDataFrame:
+        
+        # TODO: Consider using pandas.describe() instead
+
+        df_res = df.agg(
+            mean=(value_col, "mean"),
+            median=(value_col, "median"),
+            min=(value_col, "min"),
+            max=(value_col, "max"),
+            p_5=(value_col, lambda x: np.percentile(x, 5)),
+            p_95=(value_col, lambda x: np.percentile(x, 95)),
+            std=(value_col, "std"),
+        ).reset_index()
+
+        return df_res
+
+    def _check_specification_compliance(
         self, df: pd.DataFrame, table_name: str
     ) -> bool:
         """
@@ -667,18 +707,18 @@ class Scenario:
 
         cols_existing = [
             col["name"]
-            for col in self.__tables_specification[table_name]
+            for col in self._tables_specification[table_name]
             if col["name"] in list(df.columns)
         ]
         cols_not_existing = [
             col["name"]
-            for col in self.__tables_specification[table_name]
+            for col in self._tables_specification[table_name]
             if col["name"] not in list(df.columns)
         ]
         cols_not_used = [
             col
             for col in list(df.columns)
-            if col not in [c["name"] for c in self.__tables_specification[table_name]]
+            if col not in [c["name"] for c in self._tables_specification[table_name]]
         ]
         if len(cols_existing) == 0 or df.size == 0:
             raise ValueError(
@@ -691,41 +731,41 @@ class Scenario:
 
         return True
 
-    def __add_time_indices(
+    def _add_time_indices(
         self,
         df: pd.DataFrame,
         time_interval: int | None = None,
         time_col: str = "start_time",
     ) -> pd.DataFrame:
         if time_interval is None:
-            time_interval = self.__settings["default_time_agg_interval"]
+            time_interval = self._settings["default_time_agg_interval"]
 
         return df.assign(time_index=lambda x: x[time_col] // (time_interval * 60))
 
-    def __require_table(self, df_name: str, cols: list[str] | None = None) -> None:
+    def _require_table(self, df_name: str, cols: list[str] | None = None) -> None:
         if df_name == "trips_df":
             assert (
-                self.__trips_df is not None
+                self._trips_df is not None
             ), "You need to add a `trips_df` to this scenario to use this method"
             if cols is not None:
                 assert all(
-                    col in list(self.__trips_df.columns) for col in cols
+                    col in list(self._trips_df.columns) for col in cols
                 ), f"One of the columns {cols} does not exist in the scenario's `trips_df`"
         elif df_name == "legs_df":
             assert (
-                self.__legs_df is not None
+                self._legs_df is not None
             ), "You need to add a `legs_df` to this scenario to use this method"
             if cols is not None:
                 assert all(
-                    col in list(self.__legs_df.columns) for col in cols
+                    col in list(self._legs_df.columns) for col in cols
                 ), f"One of the columns {cols} does not exist in the scenario's `legs_df`"
         elif df_name == "links_df":
             assert (
-                self.__links_df is not None
+                self._links_df is not None
             ), "You need to add a `links_df` to this scenario to use this method"
             if cols is not None:
                 assert all(
-                    col in list(self.__links_df.columns) for col in cols
+                    col in list(self._links_df.columns) for col in cols
                 ), f"One of the columns {cols} does not exist in the scenario's `links_df`"
         else:
             raise ValueError(f"Wrong `df_name`: {df_name}")
@@ -739,6 +779,7 @@ def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
             "id": "trip_id",
             "personId": "person_id",
             "mainMode": "main_mode",
+            "containsDrt": "contains_drt",
             "fromActType": "from_act_type",
             "toActType": "to_act_type",
             "tripStartTime": "start_time",
@@ -783,6 +824,109 @@ def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
     return df.rename(columns=rename_dict)
 
 
+class DRTScenario(Scenario):
+    def __init__(
+        self,
+        code: str | None = None,
+        name: str | None = "my scenario",
+        description: str | None = None,
+        fleet_size: int = 0,
+        trips_df: pd.DataFrame | None = None,
+        legs_df: pd.DataFrame | None = None,
+        links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
+        network_df: gpd.GeoDataFrame | None = None,
+    ):
+        super().__init__(
+            code, name, description, trips_df, legs_df, links_df, network_df
+        )
+        self.fleet_size = fleet_size
+
+    def get_n_drt_rides(self) -> int:
+        """
+        Get the total number or trips containing drt
+        """
+        self._require_table("trips_df")
+
+        # get number of trips that contain drt
+        if "contains_drt" in list(self._trips_df.columns):
+            n_rides = len(self._trips_df[self._trips_df["contains_drt"]])
+        elif "all_modes" in list(self._trips_df.columns):
+            n_rides = len(
+                self._trips_df[
+                    self._trips_df["all_modes"].str.contains(
+                        self._settings["drt_mode"]
+                    )
+                ]
+            )
+        else:
+            self._require_table("trips_df", ["main_mode"])
+            n_rides = len(
+                self._trips_df[
+                    self._trips_df["main_mode"] == self._settings["drt_mode"]
+                ]
+            )
+        return n_rides
+
+    def get_drt_intermodal_analysis(self):
+
+        # TODO: Docstring
+
+        self._require_table("trips_df", ["trip_id", "legs_count"])
+        self._require_table("legs_df", ["mode"])
+
+        if "contains_drt" in list(self._trips_df.columns):
+            drt_trip_ids = self._trips_df[self._trips_df["contains_drt"]]
+        else:
+            drt_trip_ids = list(
+                self._legs_df[self._legs_df["mode"] == self._settings["drt_mode"]][
+                    "trip_id"
+                ].unique()
+            )
+
+        # Filter legs DataFrame to keep only legs belonging to trips with "drt" mode and filter out walk legs
+        drt_legs_no_walk = self._legs_df.loc[
+            self._legs_df["trip_id"].isin(drt_trip_ids) & self._legs_df["mode"]
+            != "walk"
+        ]
+        drt_legs_no_walk["leg_number"] = (
+            drt_legs_no_walk.groupby("trip_id").cumcount() + 1
+        )
+
+        # First step is to find the number of the drt leg for each trip and to add legs_count
+        drt_numbers = (
+            drt_legs_no_walk[drt_legs_no_walk["mode"] == self._settings["drt_mode"]]
+            .rename(columns={"leg_number": "drt_number"})
+            .loc[:, ["trip_id", "drt_number"]]
+            .merge(self._trips_df[["trip_id", "legs_count"]], how="left", on="trip_id")
+        )
+
+        # Second step is to filter the drt legs df (without walk) to only keep rows that have +- 1 delta to the drt leg number
+        drt_adjacent_legs = drt_legs_no_walk.merge(drt_numbers, "left", "trip_id")
+
+        # Below: only keep if drt_number equals 1 and legs_count also equals 1 => drt leg is the only leg
+        # and also keep if the number of the leg minus the number of the drt leg equals -1 or 1 => leg is before or after drt leg
+        drt_adjacent_legs = drt_adjacent_legs[
+            (
+                (drt_adjacent_legs["drt_number"]
+                == 1) & (drt_adjacent_legs["legs_count"]
+                == 1)
+            )
+            | (np.abs(drt_adjacent_legs["leg_number"] - drt_adjacent_legs["drt_number"])
+            == 1)
+        ]
+        # Also add a column "order" to specify whether the leg is before or after (or it's a direct drt ride)
+        drt_adjacent_legs["order"] = np.select([drt_adjacent_legs["leg_number"] == drt_adjacent_legs["drt_number"],
+                                                drt_adjacent_legs["leg_number"] < drt_adjacent_legs["drt_number"],
+                                                drt_adjacent_legs["leg_number"] > drt_adjacent_legs["drt_number"]
+                                                ],
+                                                ["direct", "before", "after"])
+        
+        # Last step is to group by mode and order and then count
+        drt_intermodal = drt_adjacent_legs.groupby(["mode", "order"]).size().reset_index(name="n")
+        
+        return drt_intermodal
+
+
 class Comparison:
     def __init__(self):
         raise NotImplementedError
@@ -790,12 +934,14 @@ class Comparison:
 
 class Visualizer:
     def __init__(
-        self, scenario: Scenario | None = None, comparison: Comparison | None = None
+        self,
+        scenario: Scenario | None = None,
+        comparison: Comparison | None = None,
     ):
         # TODO: docstring
         # TODO: catch missing scenario/comparison
-        self.__scenario = scenario
-        self.__comparison = comparison
+        self._scenario = scenario
+        self._comparison = comparison
 
     def plot_modal_split(
         self,
@@ -813,7 +959,7 @@ class Visualizer:
         """
         # TODO: Need a way to supply user-configured colors
 
-        df_modal_split = self.__scenario.get_modal_split(
+        df_modal_split = self._scenario.get_modal_split(
             split_type, exclude_modes, agg_modes
         )
         df_modal_split["x_dummy"] = ""
@@ -822,7 +968,11 @@ class Visualizer:
         )
 
         fig = px.bar(
-            df_modal_split, x="x_dummy", y="prc", color="mode", text="prc_display"
+            df_modal_split,
+            x="x_dummy",
+            y="prc",
+            color="mode",
+            text="prc_display",
         )
         fig.update_traces(textfont_size=14)
         fig.update_layout(uniformtext_minsize=14, uniformtext_mode="show")
@@ -832,31 +982,33 @@ class Visualizer:
 
 class Report:
     def __init__(
-        self, scenario: Scenario | None = None, comparison: Comparison | None = None
+        self,
+        scenario: Scenario | None = None,
+        comparison: Comparison | None = None,
     ) -> None:
-        self.__scenario = scenario
-        self.__comparison = comparison
+        self._scenario = scenario
+        self._comparison = comparison
 
         file_loader = FileSystemLoader("templates")
         env = Environment(loader=file_loader)
-        self.__document_template = env.get_template("report_structure.jinja")
+        self._document_template = env.get_template("report_structure.jinja")
 
-        self.__visualizer = Visualizer(scenario, comparison)
-        self.__blocks = []
+        self._visualizer = Visualizer(scenario, comparison)
+        self._blocks = []
 
     def add_mode_analysis(self):
         file_loader = FileSystemLoader("templates")
         env = Environment(loader=file_loader)
         template = env.get_template("modal_split.jinja")
 
-        df_ms = self.__scenario.get_modal_split(agg_modes=False)
-        fig_ms = self.__visualizer.plot_modal_split()
+        df_ms = self._scenario.get_modal_split(agg_modes=False)
+        fig_ms = self._visualizer.plot_modal_split()
         fig_ms_html = pio.to_html(fig_ms)
 
         df_ms_show = df_ms[["mode", "n", "prc"]]
         df_ms_html = df_ms.to_html()
 
-        self.__blocks.append(
+        self._blocks.append(
             {
                 "title": "Modal Split",
                 "content": template.render(
@@ -866,7 +1018,7 @@ class Report:
         )
 
     def compile_html(self, filepath: str = "reports/report.html"):
-        html_res = self.__document_template.render(blocks=self.__blocks)
+        html_res = self._document_template.render(blocks=self._blocks)
 
         if not os.path.exists(os.path.dirname(filepath)):
             print(

@@ -1,7 +1,14 @@
+*
+# Note that all folder in root except TripPy are ignored and have to be included explicitly with '!'
+!TripPy/
 __pycache__
 __pycache__/*
-*/__pycache__
-*/__pycache__/*
-TripPy/__pycache__
-./documentation
-./documentation/*
+documentation
+documentation/*
+reports
+reports/*
+.vscode
+*.docx
+*.pyc
+.mypy_cache
+TripPy/trippy_test.ipynb

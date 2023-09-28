@@ -25,6 +25,12 @@
             "description": "name of the main mode used on a specific trip"
         },
         {
+            "name": "contains_drt",
+            "type": "bool",
+            "required": false,
+            "description": "whether or not drt was used on that trip"
+        },
+        {
             "name": "from_act_type",
             "type": "str",
             "required": false,
@@ -151,6 +157,12 @@
             "type": "str",
             "required": false,
             "description": "unique leg identifier. Will be added automatically if not provided"
+        },
+        {
+            "name": "leg_number",
+            "type": "int",
+            "required": false,
+            "description": "number of the leg during the corresponding trip"
         },
         {
             "name": "mode",

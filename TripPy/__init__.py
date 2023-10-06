@@ -1,7 +1,5 @@
-from .trippy import TripTable
-
-create_DataFrame = TripTable.create_DataFrame
-get_ModalSplit = TripTable.get_ModalSplit
-set_Geometry = TripTable.set_Geometry
-make_LineString = TripTable.create_LineString
-plot_ModalSplit = TripTable.plot_ModalSplit
+from .scenario import Scenario
+from .drtscenario import DRTScenario
+from .comparison import Comparison
+from .reporter import Report
+from .visualizer import Visualizer

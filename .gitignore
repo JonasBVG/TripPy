@@ -1,4 +1,5 @@
 *
+!/TripPy/*
 # Note that all folder in root except TripPy are ignored and have to be included explicitly with '!'
 !TripPy/
 __pycache__

@@ -249,6 +249,90 @@
             "description": "y coordinate of the leg end point. Coordinate reference system: EPSG:25833"
         }
     ],
-    "links_df": [],
-    "drt_df": []
+    "links_df": [
+        {
+            "name": "person_id",
+            "type": "str",
+            "required": false,
+            "description": "person identifier"
+        },
+        {
+            "name": "vehicle_id",
+            "type": "str",
+            "required": false,
+            "description": "vehicle identifier"
+        },
+        {
+            "name": "agent_type",
+            "type": "str",
+            "required": false,
+            "description": "type of agent (person)"
+        },
+        {
+            "name": "mode",
+            "type": "str",
+            "required": false,
+            "description": "name of the mode used"
+        },
+        {
+            "name": "link_id",
+            "type": "str",
+            "required": false,
+            "description": "link identifier"
+        },
+        {
+            "name": "link_enter_time",
+            "type": "int",
+            "required": false,
+            "description": "time of link entry in seconds"
+        },
+        {
+            "name": "link_leave_time",
+            "type": "str",
+            "required": false,
+            "description": "time of link exit in seconds"
+        },
+        {
+            "name": "from_stop_id",
+            "type": "str",
+            "required": false,
+            "description": "identifier of stop where agent entered the pt vehicle"
+        },
+        {
+            "name": "to_stop_id",
+            "type": "str",
+            "required": false,
+            "description": "identifier of stop where agent will alight the pt vehicle"
+        },
+        {
+            "name": "distance_travelled",
+            "type": "float",
+            "required": false,
+            "description": "distance travelled on this link in meters"
+        },
+        {
+            "name": "link_enter_x",
+            "type": "float",
+            "required": false,
+            "description": "x coordinate of the agent's entry point on the link. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "link_enter_y",
+            "type": "float",
+            "required": false,
+            "description": "y coordinate of the agent's entry point on the link. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "link_leave_x",
+            "type": "float",
+            "required": false,
+            "description": "x coordinate of the agent's exit point on the link. Coordinate reference system: EPSG:25833"
+        },
+        {
+            "name": "link_leave_y",
+            "type": "float",
+            "required": false,
+            "description": "y coordinate of the agent's exit point on the link. Coordinate reference system: EPSG:25833"
+        }
+    ]
 }

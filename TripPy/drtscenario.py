@@ -45,132 +45,77 @@ class DRTScenario(Scenario):
             )
         return n_rides
 
-    def get_eta(self, kind: str = "mean", quantile: int = 95) -> float | pd.DataFrame:
+    def get_eta(self) -> pd.DataFrame:
         """
-        Get the ETA (mean, median or a other quantile) of all DRT-Trips
+        Get a `DataFrame` containing a collection of travel time statistics for DRT
+        ---
 
-        Arguments:
-        - `kind`: specify a ETA-variant or choose all for a Dataframe with all kinds of ETA
-        - `kind`: Define a quantile for the ETA-quantile
-
-        Columns:
-        - `ETA`: ETA-KPI
-        - `minutes`: minuetes of the ETA78
-
+        Columns of `DataFrame` returned:
+        - `travel_part`: part of travel time the minutes value stands for. Example: 'waiting'
+        - `mean`: mean number of minutes
+        - `median`: median number of minutes
+        - `min`: minimum number of minutes
+        - `max`: minimum number of minutes
+        - `p_5`: fifth percentile
+        - `p_95`: ninety-fifth percentile
+        - `std`: standard deviation
         """
-        #! do it like in Scenario.get_travel_time_stats() to keep consistent
-        
         self._require_table("legs_df")
 
-        drt_legs = self._legs_df[self._legs_df["mode"] == "drt"]
-
-        if kind == "mean":
-            return drt_legs["waiting_time"].mean() / 60
-        if kind == "median":
-            return drt_legs["waiting_time"].median() / 60
-        if kind == "quantile":
-            return drt_legs["waiting_time"].quantile(quantile / 100) / 60
-        if kind == "min":
-            return drt_legs["waiting_time"].min() / 60
-        if kind == "max":
-            return drt_legs["waiting_time"].max() / 60
-
-        elif kind == "all":
-            etas = []
-            etas.append(self.get_eta("mean"))
-            etas.append(self.get_eta("median"))
-            etas.append(self.get_eta("quantile", quantile=quantile))
-            etas.append(self.get_eta("min"))
-            etas.append(self.get_eta("max"))
-
-            eta_df = pd.DataFrame()
-            eta_df["ETA"] = ["mean", "median", f"{quantile} % quantile", "min", "max"]
-            eta_df["minutes"] = etas
-            return eta_df
-        else:
-            raise ValueError(
-                "Wrong 'kind'. Choose 'mean', 'median', 'quantile', 'min', 'max' or 'all' to get all ETAs in a dataframe."
+        df_ttime = Scenario.calc_descriptive_statistics(
+            self._legs_df[self._legs_df['mode'] == "drt"]
+            .melt(
+                id_vars=["trip_id", "stage_id"],
+                var_name="travel_part",
+                value_name="minutes",
             )
+            .groupby("travel_part"),
+            "minutes",
+        )
+
+        return df_ttime
 
     def get_eta_day(
-        self, kind: str = "mean", time_interval: int = 60, quantile: int = 95
+        self, 
+        time_interval: int | None = None
     ) -> pd.DataFrame:
         """
-        Mean, median, min, max or a specific quantile ETA per time index.
-
-        Arguement
-
+        Get a `DataFrame` containing DRT ETA statistics per time_index.
+        ---
+        
+        Columns of `DataFrame` returned:
+        - `time_index`: the time index calculated using _add_time_indices
+        - `mean`: mean number of minutes
+        - `median`: median number of minutes
+        - `min`: minimum number of minutes
+        - `max`: minimum number of minutes
+        - `p_5`: fifth percentile
+        - `p_95`: ninety-fifth percentile
+        - `std`: standard deviation
         """
+        # TODO: implement custom quantiles
+
         self._require_table("legs_df")
 
-        drt_legs = self._legs_df[self._legs_df["mode"] == "drt"]
-        drt_legs["waiting_time"] = drt_legs["waiting_time"] / 60
-        if kind == "mean":
-            eta_day = (
-                (self._add_time_indices(drt_legs, time_interval=time_interval))
-                .groupby("time_index")["waiting_time"]
-                .mean()
-                .reset_index()
+        df_with_time_index = self._add_time_indices(
+            self._legs_df[self._legs_df['mode'] == "drt"]
+            .melt(
+                id_vars=["trip_id", "stage_id"],
+                var_name="travel_part",
+                value_name="minutes",
             )
-            return eta_day
-        elif kind == "median":
-            eta_day = (
-                (self._add_time_indices(drt_legs, time_interval=time_interval))
-                .groupby("time_index")["waiting_time"]
-                .median()
-                .reset_index()
-            )
-            return eta_day
-        elif kind == "quantile":
-            eta_day = (
-                (self._add_time_indices(drt_legs, time_interval=time_interval))
-                .groupby("time_index")["waiting_time"]
-                .quantile(quantile / 100)
-                .reset_index()
-            )
-            return eta_day
-        elif kind == "min":
-            eta_day = (
-                (self._add_time_indices(drt_legs, time_interval=time_interval))
-                .groupby("time_index")["waiting_time"]
-                .min()
-                .reset_index()
-            )
-            return eta_day
-        elif kind == "max":
-            eta_day = (
-                (self._add_time_indices(drt_legs, time_interval=time_interval))
-                .groupby("time_index")["waiting_time"]
-                .max()
-                .reset_index()
-            )
-            return eta_day
-        elif kind == "all":
-            eta_day = (
-                (self._add_time_indices(drt_legs, time_interval=time_interval))
-                .groupby("time_index")
-                .agg(
-                    mean=("waiting_time", "mean"),
-                    median=("waiting_time", "median"),
-                    min=("waiting_time", "min"),
-                    max=("waiting_time", "max"),
-                    quantile=("waiting_time", lambda x: np.percentile(x, quantile)),
-                )
-                .reset_index()
-            )
-            eta_day.columns = [
-                "time_index",
-                "mean",
-                "median",
-                "min",
-                "max",
-                f"{quantile}% quantile",
-            ]
-            return eta_day
-        else:
-            raise ValueError(
-                "Wrong 'kind'. Choose 'mean', 'median', 'quantile', 'min', 'max' or 'all' to get all ETAs in a dataframe."
-            )
+            .groupby("travel_part"),
+            time_interval=time_interval
+        )
+        
+        grouped_df = df_with_time_index.groupby(["time_index", "travel_part"])
+    
+        df_ttime = Scenario.calc_descriptive_statistics(
+            grouped_df,
+            "minutes",
+        )
+
+        return df_ttime
 
     def get_drt_travel_time_stats(self):
         # TODO: Returns the travel time stats only for drt legs (not intermodal trips i.e. drt+pt combined)

@@ -5,7 +5,6 @@ from .scenario import Scenario
 from .comparison import Comparison
 from .visualizer import Visualizer
 
-
 class Report:
     def __init__(
         self,
@@ -31,14 +30,28 @@ class Report:
         fig_ms = self._visualizer.plot_modal_split()
         fig_ms_html = pio.to_html(fig_ms)
 
-        df_ms_show = df_ms[["mode", "n", "prc"]]
-        df_ms_html = df_ms.to_html()
+        df_ms_show = df_ms[["mode", "n", "prc"]].rename(columns={"mode": "Verkehrsmittel", "n": "Anzahl Trips", "prc": "Modal Share"})
+        df_ms_html = df_ms_show.to_html()
 
         self._blocks.append(
             {
                 "title": "Modal Split",
                 "content": template.render(
                     plot_modal_split=fig_ms_html, table_modal_split=df_ms_html
+                ),
+            }
+        )
+
+    def add_intermodal_analysis(self):
+        file_loader = FileSystemLoader("templates")
+        env = Environment(loader=file_loader)
+        template = env.get_template("modal_split.jinja")
+
+        self._blocks.append(
+            {
+                "title": "Intermodalität",
+                "content": template.render(
+                    plot_intermodal="<p>?</p>"
                 ),
             }
         )

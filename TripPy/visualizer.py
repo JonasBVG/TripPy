@@ -2,13 +2,14 @@ import pandas as pd
 import plotly.express as px
 import plotly.io as pio
 from .scenario import Scenario
+from .drtscenario import DRTScenario
 from .comparison import Comparison
 
 
 class Visualizer:
     def __init__(
         self,
-        scenario: Scenario | None = None,
+        scenario: Scenario | DRTScenario | None = None,
         comparison: Comparison | None = None,
     ):
         # TODO: docstring

@@ -2,9 +2,9 @@ import os
 import json
 import numpy as np
 import pandas as pd
-from .scenario import Scenario
-from .drtscenario import DRTScenario
-from .reporter import Report
+# from scenario import Scenario
+# from drtscenario import DRTScenario
+# from reporter import Report
 
 
 # In case VS Code's semantic syntax highlighting (i.e. coloring module names, methods etc.) does not work anymore,

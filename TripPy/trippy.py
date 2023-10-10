@@ -2,10 +2,10 @@ import os
 import json
 import numpy as np
 import pandas as pd
-import geopandas as gpd
-import plotly.express as px
-import plotly.io as pio
-from jinja2 import Environment, FileSystemLoader
+from .scenario import Scenario
+from .drtscenario import DRTScenario
+from .reporter import Report
+
 
 # In case VS Code's semantic syntax highlighting (i.e. coloring module names, methods etc.) does not work anymore,
 # try switching to an a few weeks older version of the Pylance extension. This worked for me.
@@ -14,7 +14,7 @@ from jinja2 import Environment, FileSystemLoader
 def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
     """
     Convert the Senozon column names to the trippy standard.
-    
+
     """
     if table_type == "tripTable":
         # TODO: mainMode + otherModes -> all_modes
@@ -66,4 +66,16 @@ def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
     else:
         raise NotImplementedError
     return df.rename(columns=rename_dict)
+
+def create_drt_report(trip_table_scenario: pd.DataFrame,
+                       leg_table_scenario: pd.DataFrame, 
+                       link_table_scenario: pd.DataFrame,
+                        trip_table_base: pd.DataFrame,
+                        leg_table_base: pd.DataFrame,
+                        link_table_base: pd.DataFrame):
+    """
+    Takes trip, leg and link tables and creates a report about the usage and performance of an DRT-System
+    
+    """
+    raise NotImplementedError
 

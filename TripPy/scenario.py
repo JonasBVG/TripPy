@@ -24,7 +24,7 @@ class Scenario:
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
         network_df: gpd.GeoDataFrame | None = None,
     ):
-        # TODO: Argument type checking
+        # TODO: Argument type checking 
         # TODO: Docstring
         # TODO: Implement settings to be loaded from a json file as well
 
@@ -362,15 +362,15 @@ class Scenario:
 
         self._require_table("links_df", ["vehicle_id", "mode"])
 
-        df_filtered = self._links_df[~self._links_df["mode"].isin(exclude_modes)]
+        df_links_without_excluded_modes = self._links_df[~self._links_df["mode"].isin(exclude_modes)]
 
         if agg_modes:
-            df_filtered["mode"] = df_filtered["mode"].replace(
+            df_links_without_excluded_modes["mode"] = df_links_without_excluded_modes["mode"].replace(
                 self._settings["mode_aggregation_rules"]
             )
 
         df_veh_km = (
-            df_filtered.groupby("mode")
+            df_links_without_excluded_modes.groupby("mode")
             .agg(n=("link_travel_distance", "sum"))
             .reset_index(name="n")
         )
@@ -506,6 +506,7 @@ class Scenario:
         """
         # NOT TESTED YET
         # TODO: Consider renaming agg_gdf to something like "zones" or "zones_gdf"
+        # TODO: Separate aggreations for origin / destination
 
         self._require_table("trips_df", ["from_x", "from_y", "to_x", "to_y"])
 
@@ -676,7 +677,8 @@ class Scenario:
         df: pd.DataFrame | gpd.GeoDataFrame, value_col: str
     ) -> pd.DataFrame | gpd.GeoDataFrame:
         
-        # TODO: Consider using pandas.describe() instead
+        # TODO: Be able to configure percentiles
+        #// Consider using pandas.describe() instead
 
         df_res = df.agg(
             mean=(value_col, "mean"),

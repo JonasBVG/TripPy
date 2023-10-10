@@ -1,7 +1,7 @@
 *
-!/TripPy/*
+!/trippy/*
 # Note that all folder in root except TripPy are ignored and have to be included explicitly with '!'
-!TripPy/
+!trippy/
 __pycache__
 __pycache__/*
 documentation

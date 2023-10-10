@@ -33,9 +33,7 @@ class DRTScenario(Scenario):
         elif "all_modes" in list(self._trips_df.columns):
             n_rides = len(
                 self._trips_df[
-                    self._trips_df["all_modes"].str.contains(
-                        self._settings["drt_mode"]
-                    )
+                    self._trips_df["all_modes"].str.contains(self._settings["drt_mode"])
                 ]
             )
         else:
@@ -46,7 +44,8 @@ class DRTScenario(Scenario):
                 ]
             )
         return n_rides
-    def get_eta(self,kind: str = "mean", quantile: int = 95) -> float | pd.DataFrame:
+
+    def get_eta(self, kind: str = "mean", quantile: int = 95) -> float | pd.DataFrame:
         """
         Get the ETA (mean, median or a other quantile) of all DRT-Trips
 
@@ -59,76 +58,125 @@ class DRTScenario(Scenario):
         - `minutes`: minuetes of the ETA78
 
         """
-        self._require_table('legs_df')
-
-        drt_legs = self._legs_df[self._legs_df['mode'] == 'drt']
-
-        if kind == 'mean':
-            return drt_legs['waiting_time'].mean()/60
-        if kind == 'median':
-            return drt_legs['waiting_time'].median()/60
-        if kind == 'quantile':
-            return drt_legs['waiting_time'].quantile(quantile/100)/60
-        if kind == 'min':
-            return drt_legs['waiting_time'].min()/60
-        if kind == 'max':
-            return drt_legs['waiting_time'].max()/60
+        #! do it like in Scenario.get_travel_time_stats() to keep consistent
         
-        elif kind == 'all':
+        self._require_table("legs_df")
+
+        drt_legs = self._legs_df[self._legs_df["mode"] == "drt"]
+
+        if kind == "mean":
+            return drt_legs["waiting_time"].mean() / 60
+        if kind == "median":
+            return drt_legs["waiting_time"].median() / 60
+        if kind == "quantile":
+            return drt_legs["waiting_time"].quantile(quantile / 100) / 60
+        if kind == "min":
+            return drt_legs["waiting_time"].min() / 60
+        if kind == "max":
+            return drt_legs["waiting_time"].max() / 60
+
+        elif kind == "all":
             etas = []
-            etas.append(self.get_eta('mean'))
-            etas.append(self.get_eta('median'))
-            etas.append(self.get_eta('quantile', quantile=quantile))
-            etas.append(self.get_eta('min'))
-            etas.append(self.get_eta('max'))
-            
+            etas.append(self.get_eta("mean"))
+            etas.append(self.get_eta("median"))
+            etas.append(self.get_eta("quantile", quantile=quantile))
+            etas.append(self.get_eta("min"))
+            etas.append(self.get_eta("max"))
+
             eta_df = pd.DataFrame()
-            eta_df['ETA'] = ['mean', 'median', f'{quantile} % quantile', 'min', 'max']
-            eta_df['minutes'] = etas
+            eta_df["ETA"] = ["mean", "median", f"{quantile} % quantile", "min", "max"]
+            eta_df["minutes"] = etas
             return eta_df
         else:
-           raise ValueError("Wrong 'kind'. Choose 'mean', 'median', 'quantile', 'min', 'max' or 'all' to get all ETAs in a dataframe.")
+            raise ValueError(
+                "Wrong 'kind'. Choose 'mean', 'median', 'quantile', 'min', 'max' or 'all' to get all ETAs in a dataframe."
+            )
 
-        
-    def get_eta_day(self, kind: str ='mean',time_interval: int = 60, quantile:int = 95) -> float | pd.DataFrame:
+    def get_eta_day(
+        self, kind: str = "mean", time_interval: int = 60, quantile: int = 95
+    ) -> pd.DataFrame:
         """
         Mean, median, min, max or a specific quantile ETA per time index.
 
         Arguement
 
         """
-        self._require_table('legs_df')
+        self._require_table("legs_df")
 
-        drt_legs = self._legs_df[self._legs_df['mode'] == 'drt']
-        drt_legs['waiting_time'] = drt_legs["waiting_time"]/60
-        if kind == 'mean':
-            eta_day = (self._add_time_indices(drt_legs, time_interval=time_interval)).groupby('time_index')['waiting_time'].mean().reset_index()
+        drt_legs = self._legs_df[self._legs_df["mode"] == "drt"]
+        drt_legs["waiting_time"] = drt_legs["waiting_time"] / 60
+        if kind == "mean":
+            eta_day = (
+                (self._add_time_indices(drt_legs, time_interval=time_interval))
+                .groupby("time_index")["waiting_time"]
+                .mean()
+                .reset_index()
+            )
             return eta_day
-        elif kind == 'median':
-            eta_day = (self._add_time_indices(drt_legs, time_interval=time_interval)).groupby('time_index')['waiting_time'].median().reset_index()
+        elif kind == "median":
+            eta_day = (
+                (self._add_time_indices(drt_legs, time_interval=time_interval))
+                .groupby("time_index")["waiting_time"]
+                .median()
+                .reset_index()
+            )
             return eta_day
-        elif kind == 'quantile':
-            eta_day = (self._add_time_indices(drt_legs, time_interval=time_interval)).groupby('time_index')['waiting_time'].quantile(quantile/100).reset_index()
+        elif kind == "quantile":
+            eta_day = (
+                (self._add_time_indices(drt_legs, time_interval=time_interval))
+                .groupby("time_index")["waiting_time"]
+                .quantile(quantile / 100)
+                .reset_index()
+            )
             return eta_day
-        elif kind == 'min':
-            eta_day = (self._add_time_indices(drt_legs, time_interval=time_interval)).groupby('time_index')['waiting_time'].min().reset_index()
+        elif kind == "min":
+            eta_day = (
+                (self._add_time_indices(drt_legs, time_interval=time_interval))
+                .groupby("time_index")["waiting_time"]
+                .min()
+                .reset_index()
+            )
             return eta_day
-        elif kind == 'max':
-            eta_day = (self._add_time_indices(drt_legs, time_interval=time_interval)).groupby('time_index')['waiting_time'].max().reset_index()
+        elif kind == "max":
+            eta_day = (
+                (self._add_time_indices(drt_legs, time_interval=time_interval))
+                .groupby("time_index")["waiting_time"]
+                .max()
+                .reset_index()
+            )
             return eta_day
-        elif kind == 'all':
-            eta_day = (self._add_time_indices(drt_legs, time_interval=time_interval)).groupby('time_index').agg(mean=('waiting_time', "mean"),
-                median=('waiting_time', "median"),
-                min=('waiting_time', "min"),
-                max=('waiting_time', "max"),
-                quantile=('waiting_time', lambda x: np.percentile(x, quantile ))).reset_index()
-            eta_day.columns = ['time_index', 'mean', 'median', 'min','max', f'{quantile}% quantile']
+        elif kind == "all":
+            eta_day = (
+                (self._add_time_indices(drt_legs, time_interval=time_interval))
+                .groupby("time_index")
+                .agg(
+                    mean=("waiting_time", "mean"),
+                    median=("waiting_time", "median"),
+                    min=("waiting_time", "min"),
+                    max=("waiting_time", "max"),
+                    quantile=("waiting_time", lambda x: np.percentile(x, quantile)),
+                )
+                .reset_index()
+            )
+            eta_day.columns = [
+                "time_index",
+                "mean",
+                "median",
+                "min",
+                "max",
+                f"{quantile}% quantile",
+            ]
             return eta_day
         else:
-            raise ValueError("Wrong 'kind'. Choose 'mean', 'median', 'quantile', 'min', 'max' or 'all' to get all ETAs in a dataframe.")
+            raise ValueError(
+                "Wrong 'kind'. Choose 'mean', 'median', 'quantile', 'min', 'max' or 'all' to get all ETAs in a dataframe."
+            )
+
+    def get_drt_travel_time_stats(self):
+        # TODO: Returns the travel time stats only for drt legs (not intermodal trips i.e. drt+pt combined)
+        raise NotImplementedError
 
     def get_drt_intermodal_analysis(self):
-
         # TODO: Docstring
 
         self._require_table("trips_df", ["trip_id", "legs_count"])
@@ -167,22 +215,31 @@ class DRTScenario(Scenario):
         # and also keep if the number of the leg minus the number of the drt leg equals -1 or 1 => leg is before or after drt leg
         drt_adjacent_legs = drt_adjacent_legs[
             (
-                (drt_adjacent_legs["drt_number"]
-                == 1) & (drt_adjacent_legs["legs_count"]
-                == 1)
+                (drt_adjacent_legs["drt_number"] == 1)
+                & (drt_adjacent_legs["legs_count"] == 1)
             )
-            | (np.abs(drt_adjacent_legs["leg_number"] - drt_adjacent_legs["drt_number"])
-            == 1)
+            | (
+                np.abs(
+                    drt_adjacent_legs["leg_number"] - drt_adjacent_legs["drt_number"]
+                )
+                == 1
+            )
         ]
         # Also add a column "order" to specify whether the leg is before or after (or it's a direct drt ride)
-        drt_adjacent_legs["order"] = np.select([drt_adjacent_legs["leg_number"] == drt_adjacent_legs["drt_number"],
-                                                drt_adjacent_legs["leg_number"] < drt_adjacent_legs["drt_number"],
-                                                drt_adjacent_legs["leg_number"] > drt_adjacent_legs["drt_number"]
-                                                ],
-                                                ["direct", "before", "after"])
-        
+        drt_adjacent_legs["order"] = np.select(
+            [
+                drt_adjacent_legs["leg_number"] == drt_adjacent_legs["drt_number"],
+                drt_adjacent_legs["leg_number"] < drt_adjacent_legs["drt_number"],
+                drt_adjacent_legs["leg_number"] > drt_adjacent_legs["drt_number"],
+            ],
+            ["direct", "before", "after"],
+        )
+
         # Last step is to group by mode and order and then count
-        drt_intermodal = drt_adjacent_legs.groupby(["mode", "order"]).size().reset_index(name="n")
-        
+        drt_intermodal = (
+            drt_adjacent_legs.groupby(["mode", "order"]).size().reset_index(name="n")
+        )
+
         return drt_intermodal
 
+    # TODO: Intermodal ratio of drt and pt (travel time, distance)

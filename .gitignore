@@ -2,6 +2,7 @@
 !/trippy/*
 # Note that all folder in root except TripPy are ignored and have to be included explicitly with '!'
 !trippy/
+!tables_specification.json
 __pycache__
 __pycache__/*
 documentation

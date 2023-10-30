@@ -209,3 +209,22 @@ class DRTScenario(Scenario):
         drt_intermodal = drt_intermodal.replace("EMPTY", None)
 
         return drt_intermodal
+    
+    def get_pooling_rate(self) -> float:
+        """
+        Get the DRT pooling rate across the day (person km / vehicle km)
+        ---
+        """
+        df_modal_split = self.get_modal_split(split_type="performance")
+        try:
+            person_km = df_modal_split[df_modal_split["mode"] == self._settings["drt_mode"]]["n"].values[0]
+        except IndexError:
+            raise ValueError("No legs with DRT mode `" + self._settings["drt_mode"] + "` could be found. Make sure there are DRT legs in the legs_df and setting `drt_mode` is correctly specified")
+        
+        df_veh_km = self.get_vehicle_km()
+        try:
+            vehicle_km = df_veh_km[df_veh_km["mode"] == self._settings["drt_mode"]]["n"].values[0]
+        except IndexError:
+            raise ValueError("No vehicles with DRT mode `" + self._settings["drt_mode"] + "` could be found on any of the links. Make sure there are DRT vehicles routed on the links in the links_df and setting `drt_mode` is correctly specified")
+
+        return person_km / vehicle_km

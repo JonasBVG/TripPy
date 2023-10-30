@@ -25,9 +25,9 @@ class Scenario:
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
         network_df: gpd.GeoDataFrame | None = None,
         line_renamer: Callable | dict | None = None,
-        path_tables_specification: str = "tables_specification.json" # TODO: Move to settings
+        path_tables_specification: str = "tables_specification.json",  # TODO: Move to settings
     ):
-        # TODO: Argument type checking 
+        # TODO: Argument type checking
         # TODO: Docstring
         # TODO: Implement settings to be loaded from a json file as well
 
@@ -58,41 +58,43 @@ class Scenario:
             # TODO: for release: replace with ".*"
             "legs_table_person_id_filter": "^((?!^pt).)*$",  # only selects person_ids that do not start with "pt"
             # TODO: for release: replace with {}
-            "mode_aggregation_rulesets": {"all_pt": {
-                "100": "pt",
-                "300": "pt",
-                "400": "pt",
-                "500": "pt",
-                "600": "pt",
-                "700": "pt",
-                "800": "pt",
-                "BVB10": "pt",
-                "BVB10M": "pt",
-                "BVT30": "pt",
-                "BVT30M": "pt",
-                "BVB10X": "pt",
-                "BVU20": "pt",
-                "BVF100": "pt",
+            "mode_aggregation_rulesets": {
+                "all_pt": {
+                    "100": "pt",
+                    "300": "pt",
+                    "400": "pt",
+                    "500": "pt",
+                    "600": "pt",
+                    "700": "pt",
+                    "800": "pt",
+                    "BVB10": "pt",
+                    "BVB10M": "pt",
+                    "BVT30": "pt",
+                    "BVT30M": "pt",
+                    "BVB10X": "pt",
+                    "BVU20": "pt",
+                    "BVF100": "pt",
+                },
+                "vsys": {
+                    "100": "Bus",
+                    "300": "Tram",
+                    "400": "Fähre",
+                    "500": "S-Bahn",
+                    "600": "RV",
+                    "700": "FV",
+                    "800": "FV",
+                    "BVB10": "Bus",
+                    "BVB10M": "Bus",
+                    "BVT30": "Tram",
+                    "BVT30M": "Tram",
+                    "BVB10X": "Bus",
+                    "BVU20": "U-Bahn",
+                    "BVF100": "Fähre",
+                },
             },
-            "vsys": {
-                "100": "Bus",
-                "300": "Tram",
-                "400": "Fähre",
-                "500": "S-Bahn",
-                "600": "RV",
-                "700": "FV",
-                "800": "FV",
-                "BVB10": "Bus",
-                "BVB10M": "Bus",
-                "BVT30": "Tram",
-                "BVT30M": "Tram",
-                "BVB10X": "Bus",
-                "BVU20": "U-Bahn",
-                "BVF100": "Fähre",
-            }},
         }
 
-        with open(path_tables_specification, encoding = 'utf-8') as file:
+        with open(path_tables_specification, encoding="utf-8") as file:
             self._tables_specification = json.load(file)
 
         self._trips_df: pd.DataFrame = None
@@ -258,7 +260,7 @@ class Scenario:
         Arguments:
         - `split_type`: 'volume', 'performance'. Using 'volume' will return the number of trips based on their `main_mode` and needs `trips_df`, using 'performance' will return person kilometers based on the `legs_df`
         - `exclude_modes`: specify a list of mode names to be disregarded in the modal split. Note that these modes have to be supplied in the form they exist in the `trips_df`, not any aggregated form
-        - `agg_modes`: whether to aggregate the modes in the `trips_df` and `legs_df` according to the assignment in the settings (key `mode_aggregation_rules`)
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `trips_df` and `legs_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
 
         Columns of `DataFrame` returned:
         - `mode`: mode of transport
@@ -268,7 +270,7 @@ class Scenario:
         if split_type == "volume":
             self._require_table("trips_df", ["main_mode"])
 
-            df_filtered = self._trips_df[
+            df_filtered = self._trips_df.copy()[
                 ~self._trips_df["main_mode"].isin(exclude_modes)
             ]
 
@@ -287,7 +289,9 @@ class Scenario:
         elif split_type == "performance":
             self._require_table("legs_df", ["mode"])
 
-            df_filtered = self._legs_df[~self._legs_df["mode"].isin(exclude_modes)]
+            df_filtered = self._legs_df.copy()[
+                ~self._legs_df["mode"].isin(exclude_modes)
+            ]
 
             if agg_modes_ruleset is not None:
                 df_filtered["mode"] = df_filtered["mode"].replace(
@@ -297,7 +301,7 @@ class Scenario:
             df_split = (
                 df_filtered.groupby("mode")
                 .agg(n=("routed_distance", "sum"))
-                .reset_index(name="n")
+                .reset_index()
                 .assign(prc=lambda x: (x["n"] / x["n"].sum()))
             )
         else:
@@ -325,7 +329,7 @@ class Scenario:
         - `time_interval`: number of minutes one time bin consists of
         - `time_col`: name of the column containing the time information to be binned
         - `exclude_modes`: specify a list of mode names to be disregarded in the modal split. Note that these modes have to be supplied in the form they exist in the `trips_df`, not any aggregated form
-        - `agg_modes`: whether to aggregate the modes in the `trips_df` according to the assignment in the settings (key `mode_aggregation_rules`)
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `trips_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
 
         Columns of DataFrame returned:
         - `mode`: mode of transport
@@ -338,7 +342,7 @@ class Scenario:
         if split_type == "volume":
             self._require_table("trips_df", ["main_mode"])
 
-            df_filtered = self._trips_df[
+            df_filtered = self._trips_df.copy()[
                 ~self._trips_df["main_mode"].isin(exclude_modes)
             ]
 
@@ -373,7 +377,7 @@ class Scenario:
         ---
         Arguments:
         - `exclude_modes`: specify a list of mode names to be disregarded. Note that these modes have to be supplied in the form they exist in the `links_df`, not any aggregated form
-        - `agg_modes`: whether to aggregate the modes in the `links_df` according to the assignment in the settings (key `mode_aggregation_rules`)
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `links_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
 
         Columns of `DataFrame` returned:
         - `mode`: mode of transport
@@ -384,25 +388,34 @@ class Scenario:
 
         self._require_table("links_df", ["vehicle_id", "mode"])
 
-        df_links_without_excluded_modes = self._links_df[~self._links_df["mode"].isin(exclude_modes)]
+        df_links_without_excluded_modes = self._links_df.copy()[
+            ~self._links_df["mode"].isin(exclude_modes)
+        ]
 
         if agg_modes_ruleset is not None:
-            df_links_without_excluded_modes["mode"] = df_links_without_excluded_modes["mode"].replace(
-                self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
-            )
+            df_links_without_excluded_modes["mode"] = df_links_without_excluded_modes[
+                "mode"
+            ].replace(self._settings["mode_aggregation_rulesets"][agg_modes_ruleset])
 
         df_veh_km = (
             df_links_without_excluded_modes.groupby("mode")
-            .agg(n=("link_travel_distance", "sum"))
-            .reset_index(name="n")
+            .agg(n=("distance_travelled", "sum"))
+            .reset_index()
         )
 
         return df_veh_km
 
-    def get_travel_time_stats(self) -> pd.DataFrame:
+    def get_travel_time_stats(
+        self,
+        distinguish_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
+    ) -> pd.DataFrame:
         """
         Get a `DataFrame` containing a collection of travel time statistics
         ---
+        Arguments:
+        - `distinguish_modes`: whether or not to distinguish between main modes in the resulting `DataFrame`
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `trips_df` (Only if `distinguish_modes=True`). Has to be configured in the settings first (key `mode_aggregation_rulesets`)
 
         Columns of `DataFrame` returned:
         - `travel_part`: part of travel time the minutes value stands for. Example: 'waiting'
@@ -420,17 +433,81 @@ class Scenario:
 
         self._require_table("trips_df", ["travel_time"])
 
-        # Melt the DataFrame to stack travel_parts into rows
-        df_ttime = Scenario.calc_descriptive_statistics(
-            self._trips_df.melt(
-                id_vars=["trip_id"],
-                var_name="travel_part",
-                value_name="minutes",
-            ).groupby("travel_part"),
-            "minutes",
-        )
+        df_ttime = self._trips_df.copy()
+        if agg_modes_ruleset is not None:
+            df_ttime["main_mode"] = df_ttime["main_mode"].replace(
+                self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
+            )
+
+        if distinguish_modes:
+            # Melt the DataFrame to stack travel_parts into rows
+            df_ttime = Scenario.calc_descriptive_statistics(
+                df_ttime.melt(
+                    id_vars=["trip_id", "main_mode"],
+                    var_name="travel_part",
+                    value_name="minutes",
+                ).groupby(["travel_part", "main_mode"]),
+                "minutes",
+            )
+        else:
+            df_ttime = Scenario.calc_descriptive_statistics(
+                df_ttime.melt(
+                    id_vars=["trip_id"],
+                    var_name="travel_part",
+                    value_name="minutes",
+                ).groupby("travel_part"),
+                "minutes",
+            )
 
         return df_ttime
+
+    def get_travel_distance_stats(
+        self,
+        distinguish_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
+        distance_col: str = "routed_distance",
+    ) -> pd.DataFrame:
+        """
+        Get a `DataFrame` containing a collection of travel distance statistics
+        ---
+        Arguments:
+        - `distinguish_modes`: whether or not to distinguish between main modes in the resulting `DataFrame`
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `trips_df` (Only if `distinguish_modes=True`). Has to be configured in the settings first (key `mode_aggregation_rulesets`)
+        - `distance_col`: which column to generate the statistics for. The default `routed_distance` should be sensible most of the time
+
+        Columns of `DataFrame` returned:
+        - `main_mode`: main_mode of transport the statistics belong to. Only if `distinguish_modes` was set to `True`
+        - `mean`: mean number of minutes
+        - `median`: median number of minutes
+        - `min`: minimum number of minutes
+        - `max`: minimum number of minutes
+        - `p_5`: fifth percentile
+        - `p_95`: ninety-fifth percentile
+        - `std`: standard deviation
+        """
+
+        # TODO: travel time stats per mode!
+        # TODO: add abbility to only recieve one stat for drtscenario.get_eta_day
+
+        self._require_table("trips_df", ["travel_time"])
+
+        df_tdist = self._trips_df.copy()
+        if agg_modes_ruleset is not None:
+            df_tdist["main_mode"] = df_tdist["main_mode"].replace(
+                self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
+            )
+
+        if distinguish_modes:
+            # Melt the DataFrame to stack travel_parts into rows
+            df_tdist = Scenario.calc_descriptive_statistics(
+                df_tdist.groupby("main_mode"),
+                distance_col,
+            )
+        else:
+            # Melt the DataFrame to stack travel_parts into rows
+            df_tdist = Scenario.calc_descriptive_statistics(df_tdist, distance_col)
+
+        return df_tdist
 
     def get_n_vehicles_day(
         self,
@@ -443,6 +520,7 @@ class Scenario:
         ---
         Arguments:
         - `time_interval`: number of minutes one time bin consists of
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `links_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
 
         Columns of `DataFrame` returned:
         - `mode`: mode of transport
@@ -452,10 +530,10 @@ class Scenario:
 
         self._require_table("links_df", ["vehicle_id", "mode"])
 
-        df_filtered = self._links_df[~self._links_df["main_mode"].isin(exclude_modes)]
+        df_filtered = self._links_df.copy()[~self._links_df["mode"].isin(exclude_modes)]
 
         if agg_modes_ruleset is not None:
-            df_filtered["main_mode"] = df_filtered["main_mode"].replace(
+            df_filtered["mode"] = df_filtered["mode"].replace(
                 self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
             )
 
@@ -486,7 +564,7 @@ class Scenario:
         - `time_interval`: number of minutes one time bin consists of
         - `time_col`: name of the column containing the time information to be binned
         - `exclude_modes`: specify a list of mode names to be disregarded. Note that these modes have to be supplied in the form they exist in the `links_df`, not any aggregated form
-        - `agg_modes`: whether to aggregate the modes in the `links_df` according to the assignment in the settings (key `mode_aggregation_rules`)
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `links_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
         """
 
         # df_split_day = self.get_modal_split_day(
@@ -517,7 +595,7 @@ class Scenario:
         - `agg_gdf`: multipolygon `GeoDataFrame` containing zones the trips will be aggregated to. Must contain a column called `zone_id`. Will append all feature attributes to the df
         - `distinguish_modes`: whether or not to distinguish between modes in the resulting `GeoDataFrame`. Must be set to `True` to use `pt_lines`
         - `exclude_modes`: specify a list of mode names to be disregarded. Note that these modes have to be supplied in the form they exist in the `trips_df`, not any aggregated form
-        - `agg_modes`: whether to aggregate the modes in the `links_df` according to the assignment in the settings (key `mode_aggregation_rules`). This happens after filtering for provided `pt_lines`
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `trips_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
         - `pt_lines`: line id, list of line ids or `None`. If line id(s) are specified, the pt mode(s) will only contain OD data for those lines. If set to `None`, all lines will be included
         - `direction`: 'origin' or 'destination'. Whether to count trips originating or ending in the zones provided in `agg_gdf`
 
@@ -648,6 +726,57 @@ class Scenario:
     ) -> gpd.GeoDataFrame:
         raise NotImplementedError
 
+    def get_access_egress_distances(
+        self,
+        agg_modes_ruleset: str | None = None,
+    ) -> pd.DataFrame:
+        """
+        Get a `GeoDataFrame` containing descriptive statistics on access and egress walking distances per mode
+        ---
+        Arguments:
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `trips_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
+
+        Columns of `DataFrame` returned:
+        - `main_mode`: main_mode of transport the statistics belong to. Only if `distinguish_modes` was set to `True`
+        - `kind`: either 'access' or 'egress'
+        - `mean`: mean distance in meters
+        - `median`: median distance in meters
+        - `min`: minimum distance in meters
+        - `max`: minimum distance in meters
+        - `p_5`: fifth percentile
+        - `p_95`: ninety-fifth percentile
+        - `std`: standard deviation
+        """
+
+        self._require_table(
+            "trips_df", ["main_mode", "access_distance", "egress_distance"]
+        )
+
+        access_egress = self._trips_df.copy()
+
+        if agg_modes_ruleset is not None:
+            access_egress["main_mode"] = access_egress["main_mode"].replace(
+                self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
+            )
+
+        access_egress = self.calc_descriptive_statistics(
+            (
+                access_egress
+                # melt into long format so we can use the descriptive statistics method
+                .melt(
+                    id_vars=["main_mode"],
+                    value_vars=["access_distance", "egress_distance"],
+                    value_name="distance",
+                    var_name="kind",
+                )
+                .replace({"access_distance": "access", "egress_distance": "egress"})
+                .groupby(["main_mode", "kind"])
+            ),
+            value_col="distance",
+        ).fillna(0)
+
+        return access_egress
+
     def get_line_ridership(
         self,
         lines: str | list[str] | None = None,
@@ -699,9 +828,8 @@ class Scenario:
     def calc_descriptive_statistics(
         df: pd.DataFrame | gpd.GeoDataFrame, value_col: str
     ) -> pd.DataFrame | gpd.GeoDataFrame:
-        
         # TODO: Be able to configure percentiles
-        #// Consider using pandas.describe() instead
+        # // Consider using pandas.describe() instead
 
         df_res = df.agg(
             mean=(value_col, "mean"),
@@ -788,4 +916,3 @@ class Scenario:
                 ), f"One of the columns {cols} does not exist in the scenario's `links_df`"
         else:
             raise ValueError(f"Wrong `df_name`: {df_name}")
-

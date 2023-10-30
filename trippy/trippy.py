@@ -2,6 +2,8 @@ import os
 import json
 import numpy as np
 import pandas as pd
+
+import re #! This is only neccessary for bvg_line_renamer()
 # from scenario import Scenario
 # from drtscenario import DRTScenario
 # from reporter import Report
@@ -10,6 +12,41 @@ import pandas as pd
 # In case VS Code's semantic syntax highlighting (i.e. coloring module names, methods etc.) does not work anymore,
 # try switching to an a few weeks older version of the Pylance extension. This worked for me.
 
+def bvg_line_renamer(line_id: str, mode: str):
+    if mode == "100":  # Nicht-BVG-Bus
+        if re.search("---", line_id):
+            return re.search(r'---(.*)', line_id).group(1)
+        elif re.search("___", line_id):
+            return re.search(r'___(.*)', line_id).group(1)
+        else:
+            return re.search(r'^[0-9]*', line_id).group(0)
+    elif mode == "300" or mode == "400":  # Nicht-BVG-Tram or Fähre
+        return re.search(r'---([a-zA-Z0-9]+)$', line_id).group(1)
+    elif mode == "500":  # S-Bahn
+        return re.search(r'(S[a-zA-Z0-9]+)', line_id).group(1)
+    elif mode == "600":  # RV
+        return re.search(r'[a-zA-Z]+[0-9]*', line_id).group(0)
+    elif mode in ["700", "800"]:  # FV (for unknown modes)
+        return "FV"
+    elif mode == "BVB10":  # normale + Nachtbusse
+        prefix = re.search(r'^[A-Z]*', line_id).group(0)
+        number = re.search(r'[0-9]+', line_id).group(0)
+        return prefix + str(int(number))
+    elif mode == "BVB10M":  # Metrobusse
+        return re.search(r'^M[0-9]+', line_id).group(0)
+    elif mode == "BVB10X":  # Expressbusse
+        number = re.search(r'[0-9]+', line_id).group(0)
+        return "X" + str(int(number))
+    elif mode == "BVT30":  # Normale Tram
+        return re.search(r'^[0-9]+', line_id).group(0)
+    elif mode == "BVT30M":  # Metrotram
+        return re.search(r'^M[0-9]+', line_id).group(0)
+    elif mode == "BVU20":  # U-Bahn
+        return re.search(r'^[a-zA-Z0-9]+', line_id).group(0)
+    elif mode == "BVF100":  # Fähre
+        return re.search(r'F[0-9]+', line_id).group(0)
+    elif mode == "walk":
+        return mode
 
 def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
     """
@@ -62,6 +99,23 @@ def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
             "fromY": "from_y",
             "toX": "to_x",
             "toY": "to_y",
+        }
+    elif table_type == "linksTable":
+        rename_dict = {
+            "personId": "person_id",
+            "vehicleId": "vehicle_id",
+            "agentType": "agent_type",
+            "linkId": "link_id",
+            "lineId": "line_id",
+            "linkEnterTime": "link_enter_time",
+            "linkLeaveTime": "link_leave_time",
+            "fromStopId": "from_stop_id",
+            "toStopId": "to_stop_id",
+            "distanceTravelledOnLink": "distance_travelled",
+            "linkEnterX": "link_enter_x",
+            "linkEnterY": "link_enter_y",
+            "linkLeaveX": "link_leave_x",
+            "linkLeaveY": "link_leave_y"
         }
     else:
         raise NotImplementedError

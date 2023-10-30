@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+from typing import Callable
 
 
 class Scenario:
@@ -23,6 +24,8 @@ class Scenario:
         legs_df: pd.DataFrame | None = None,
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
         network_df: gpd.GeoDataFrame | None = None,
+        line_renamer: Callable | dict | None = None,
+        path_tables_specification: str = "tables_specification.json" # TODO: Move to settings
     ):
         # TODO: Argument type checking 
         # TODO: Docstring
@@ -31,10 +34,12 @@ class Scenario:
         self.code = code
         self.name = name
         self.description = description
+        self._line_renamer = line_renamer
 
         self._settings = {
             "default_time_agg_interval": 60,
             "drt_mode": "drt",
+            "walk_mode": "walk",
             "pt_modes": [
                 "100",
                 "300",
@@ -53,9 +58,10 @@ class Scenario:
             # TODO: for release: replace with ".*"
             "legs_table_person_id_filter": "^((?!^pt).)*$",  # only selects person_ids that do not start with "pt"
             # TODO: for release: replace with {}
-            "mode_aggregation_rules": {
+            "mode_aggregation_rulesets": {"all_pt": {
                 "100": "pt",
                 "300": "pt",
+                "400": "pt",
                 "500": "pt",
                 "600": "pt",
                 "700": "pt",
@@ -68,9 +74,25 @@ class Scenario:
                 "BVU20": "pt",
                 "BVF100": "pt",
             },
+            "vsys": {
+                "100": "Bus",
+                "300": "Tram",
+                "400": "Fähre",
+                "500": "S-Bahn",
+                "600": "RV",
+                "700": "FV",
+                "800": "FV",
+                "BVB10": "Bus",
+                "BVB10M": "Bus",
+                "BVT30": "Tram",
+                "BVT30M": "Tram",
+                "BVB10X": "Bus",
+                "BVU20": "U-Bahn",
+                "BVF100": "Fähre",
+            }},
         }
 
-        with open("tables_specification.json", encoding = 'utf-8') as file:
+        with open(path_tables_specification, encoding = 'utf-8') as file:
             self._tables_specification = json.load(file)
 
         self._trips_df: pd.DataFrame = None
@@ -228,7 +250,7 @@ class Scenario:
         self,
         split_type: str = "volume",
         exclude_modes: list[str] = [],
-        agg_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
     ) -> pd.DataFrame:
         """
         Get a `DataFrame` containing the number of trips or the number of person kilometers per mode of transport
@@ -250,9 +272,9 @@ class Scenario:
                 ~self._trips_df["main_mode"].isin(exclude_modes)
             ]
 
-            if agg_modes:
+            if agg_modes_ruleset is not None:
                 df_filtered["main_mode"] = df_filtered["main_mode"].replace(
-                    self._settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
                 )
 
             df_split = (
@@ -267,9 +289,9 @@ class Scenario:
 
             df_filtered = self._legs_df[~self._legs_df["mode"].isin(exclude_modes)]
 
-            if agg_modes:
+            if agg_modes_ruleset is not None:
                 df_filtered["mode"] = df_filtered["mode"].replace(
-                    self._settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
                 )
 
             df_split = (
@@ -293,7 +315,7 @@ class Scenario:
         time_interval: int = 60,
         time_col: str = "start_time",
         exclude_modes: list[str] = [],
-        agg_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
     ) -> pd.DataFrame:
         """
         Get a `DataFrame` containing the number of trips or the number of person kilometers per mode of transport
@@ -320,9 +342,9 @@ class Scenario:
                 ~self._trips_df["main_mode"].isin(exclude_modes)
             ]
 
-            if agg_modes:
+            if agg_modes_ruleset is not None:
                 df_filtered["main_mode"] = df_filtered["main_mode"].replace(
-                    self._settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
                 )
 
             df_split = (
@@ -344,7 +366,7 @@ class Scenario:
     def get_vehicle_km(
         self,
         exclude_modes: list[str] = [],
-        agg_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
     ) -> pd.DataFrame:
         """
         Get a `DataFrame` containing the total number of vehicle kilometers performed per (vehicle-using) mode
@@ -364,9 +386,9 @@ class Scenario:
 
         df_links_without_excluded_modes = self._links_df[~self._links_df["mode"].isin(exclude_modes)]
 
-        if agg_modes:
+        if agg_modes_ruleset is not None:
             df_links_without_excluded_modes["mode"] = df_links_without_excluded_modes["mode"].replace(
-                self._settings["mode_aggregation_rules"]
+                self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
             )
 
         df_veh_km = (
@@ -394,6 +416,7 @@ class Scenario:
         """
 
         # TODO: travel time stats per mode!
+        # TODO: add abbility to only recieve one stat for drtscenario.get_eta_day
 
         self._require_table("trips_df", ["travel_time"])
 
@@ -413,7 +436,7 @@ class Scenario:
         self,
         time_interval: int = 60,
         exclude_modes: list[str] = [],
-        agg_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
     ) -> pd.DataFrame:
         """
         Get a `DataFrame` containing the number of unique vehicles travelling on the network per mode and time interval
@@ -431,9 +454,9 @@ class Scenario:
 
         df_filtered = self._links_df[~self._links_df["main_mode"].isin(exclude_modes)]
 
-        if agg_modes:
+        if agg_modes_ruleset is not None:
             df_filtered["main_mode"] = df_filtered["main_mode"].replace(
-                self._settings["mode_aggregation_rules"]
+                self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
             )
 
         df_veh = (
@@ -454,7 +477,7 @@ class Scenario:
         time_interval: int = 60,
         time_col: str = "start_time",
         exclude_modes: list[str] = [],
-        agg_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
     ) -> pd.DataFrame:
         """
         Get the index of the time bin with the highest number of trips starting/ending, summarised over the specified mode(s)
@@ -483,7 +506,7 @@ class Scenario:
         agg_gdf: gpd.GeoDataFrame,
         distinguish_modes=True,
         exclude_modes: list[str] = [],
-        agg_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
         pt_lines: list[str] | None = None,
         direction: str = "origin",
     ) -> gpd.GeoDataFrame:
@@ -560,9 +583,9 @@ class Scenario:
             else:
                 trips_filtered = joined
 
-            if agg_modes:
+            if agg_modes_ruleset is not None:
                 trips_filtered["main_mode"] = trips_filtered["main_mode"].replace(
-                    self._settings["mode_aggregation_rules"]
+                    self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
                 )
 
             counts = (

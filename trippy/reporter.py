@@ -45,7 +45,7 @@ class Report:
     def add_intermodal_analysis(self):
         file_loader = FileSystemLoader("templates")
         env = Environment(loader=file_loader)
-        template = env.get_template("modal_split.jinja")
+        template = env.get_template("intermodal.jinja")
 
         self._blocks.append(
             {

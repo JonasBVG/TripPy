@@ -21,7 +21,7 @@ class Visualizer:
         self,
         split_type: str = "volume",
         exclude_modes: list[str] = [],
-        agg_modes: bool = True,
+        agg_modes_ruleset: str | None = None,
     ):
         """
         Get a `plotly.graph_objects.Figure` bar plot showing the modal split of a scenario or a comparison
@@ -34,7 +34,7 @@ class Visualizer:
         # TODO: Need a way to supply user-configured colors
 
         df_modal_split = self._scenario.get_modal_split(
-            split_type, exclude_modes, agg_modes
+            split_type, exclude_modes, agg_modes_ruleset
         )
         df_modal_split["x_dummy"] = ""
         df_modal_split["prc_display"] = df_modal_split.apply(
@@ -50,5 +50,19 @@ class Visualizer:
         )
         fig.update_traces(textfont_size=14)
         fig.update_layout(uniformtext_minsize=14, uniformtext_mode="show")
+
+        return fig
+
+    def plot_drt_intermodal_connections(self):
+        """
+        Get a `plotly.graph_objects.Figure` sunburst plot showing intermodal connections from/to drt trips
+        """
+        df_conns = self._scenario.get_drt_intermodal_analysis(agg_modes_ruleset="vsys")
+
+        fig = px.sunburst(
+            df_conns,
+            path=["order", "mode", "line_id"],
+            values="n"
+        )
 
         return fig

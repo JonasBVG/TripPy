@@ -2,6 +2,7 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from .scenario import Scenario
+from typing import Callable
 
 
 class DRTScenario(Scenario):
@@ -15,9 +16,10 @@ class DRTScenario(Scenario):
         legs_df: pd.DataFrame | None = None,
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
         network_df: gpd.GeoDataFrame | None = None,
+        line_renamer: Callable | dict | None = None
     ):
         super().__init__(
-            code, name, description, trips_df, legs_df, links_df, network_df
+            code, name, description, trips_df, legs_df, links_df, network_df, line_renamer
         )
         self.fleet_size = fleet_size
 
@@ -63,9 +65,9 @@ class DRTScenario(Scenario):
         self._require_table("legs_df")
 
         df_ttime = Scenario.calc_descriptive_statistics(
-            self._legs_df[self._legs_df['mode'] == "drt"]
+            self._legs_df[self._legs_df["mode"] == "drt"]
             .melt(
-                id_vars=["trip_id", "stage_id"],
+                id_vars=["trip_id", "leg_id"],
                 var_name="travel_part",
                 value_name="minutes",
             )
@@ -75,14 +77,11 @@ class DRTScenario(Scenario):
 
         return df_ttime
 
-    def get_eta_day(
-        self, 
-        time_interval: int | None = None
-    ) -> pd.DataFrame:
+    def get_eta_day(self, time_interval: int | None = None) -> pd.DataFrame:
         """
         Get a `DataFrame` containing DRT ETA statistics per time_index.
         ---
-        
+
         Columns of `DataFrame` returned:
         - `time_index`: the time index calculated using _add_time_indices
         - `mean`: mean number of minutes
@@ -95,21 +94,23 @@ class DRTScenario(Scenario):
         """
         # TODO: implement custom quantiles
 
+        #! Should only give back ETA, not all travel_parts
+        # TODO: Maybe add back ability to get only one statistic -> also implement in Scenario.get_travel_time_stats()
+
         self._require_table("legs_df")
 
         df_with_time_index = self._add_time_indices(
-            self._legs_df[self._legs_df['mode'] == "drt"]
-            .melt(
-                id_vars=["trip_id", "stage_id"],
-                var_name="travel_part",
-                value_name="minutes",
-            )
-            .groupby("travel_part"),
-            time_interval=time_interval
+            self._legs_df[self._legs_df["mode"] == "drt"], time_interval=time_interval
+        ).melt(
+            id_vars=["trip_id", "leg_id", "time_index"],
+            var_name="travel_part",
+            value_name="minutes",
         )
-        
-        grouped_df = df_with_time_index.groupby(["time_index", "travel_part"])
-    
+
+        grouped_df = df_with_time_index.query("travel_part == 'waiting_time'").groupby(
+            ["time_index"]
+        )
+
         df_ttime = Scenario.calc_descriptive_statistics(
             grouped_df,
             "minutes",
@@ -121,14 +122,14 @@ class DRTScenario(Scenario):
         # TODO: Returns the travel time stats only for drt legs (not intermodal trips i.e. drt+pt combined)
         raise NotImplementedError
 
-    def get_drt_intermodal_analysis(self):
+    def get_drt_intermodal_analysis(self, agg_modes_ruleset: str | None = None,):
         # TODO: Docstring
 
         self._require_table("trips_df", ["trip_id", "legs_count"])
-        self._require_table("legs_df", ["mode"])
+        self._require_table("legs_df", ["mode", "line_id"])
 
         if "contains_drt" in list(self._trips_df.columns):
-            drt_trip_ids = self._trips_df[self._trips_df["contains_drt"]]
+            drt_trip_ids = self._trips_df[self._trips_df["contains_drt"]]["trip_id"].unique()
         else:
             drt_trip_ids = list(
                 self._legs_df[self._legs_df["mode"] == self._settings["drt_mode"]][
@@ -138,26 +139,29 @@ class DRTScenario(Scenario):
 
         # Filter legs DataFrame to keep only legs belonging to trips with "drt" mode and filter out walk legs
         drt_legs_no_walk = self._legs_df.loc[
-            self._legs_df["trip_id"].isin(drt_trip_ids) & self._legs_df["mode"]
-            != "walk"
-        ]
+            (self._legs_df["trip_id"].isin(drt_trip_ids))
+            & (self._legs_df["mode"] != self._settings["walk_mode"])
+        ].copy()
         drt_legs_no_walk["leg_number"] = (
             drt_legs_no_walk.groupby("trip_id").cumcount() + 1
+        )
+        drt_legs_no_walk["legs_count"] = (
+            drt_legs_no_walk.groupby("trip_id")["leg_number"].transform("max")
         )
 
         # First step is to find the number of the drt leg for each trip and to add legs_count
         drt_numbers = (
             drt_legs_no_walk[drt_legs_no_walk["mode"] == self._settings["drt_mode"]]
             .rename(columns={"leg_number": "drt_number"})
-            .loc[:, ["trip_id", "drt_number"]]
-            .merge(self._trips_df[["trip_id", "legs_count"]], how="left", on="trip_id")
-        )
+            .drop_duplicates(subset=["trip_id", "drt_number"])
+        )[["trip_id", "drt_number"]]
 
-        # Second step is to filter the drt legs df (without walk) to only keep rows that have +- 1 delta to the drt leg number
+        # Second step is to filter the drt legs df (without walk) to only keep rows that have +- 1 delta to the drt leg number#
+        # (or exactly the drt leg number)
         drt_adjacent_legs = drt_legs_no_walk.merge(drt_numbers, "left", "trip_id")
+        # Below: only keep if drt_number equals 1 and legs_count also equals 1 -> drt leg is the only leg
+        # and also keep if the number of the leg minus the number of the drt leg equals -1 or 1 -> leg is before or after drt leg
 
-        # Below: only keep if drt_number equals 1 and legs_count also equals 1 => drt leg is the only leg
-        # and also keep if the number of the leg minus the number of the drt leg equals -1 or 1 => leg is before or after drt leg
         drt_adjacent_legs = drt_adjacent_legs[
             (
                 (drt_adjacent_legs["drt_number"] == 1)
@@ -170,21 +174,38 @@ class DRTScenario(Scenario):
                 == 1
             )
         ]
+
         # Also add a column "order" to specify whether the leg is before or after (or it's a direct drt ride)
         drt_adjacent_legs["order"] = np.select(
             [
-                drt_adjacent_legs["leg_number"] == drt_adjacent_legs["drt_number"],
-                drt_adjacent_legs["leg_number"] < drt_adjacent_legs["drt_number"],
-                drt_adjacent_legs["leg_number"] > drt_adjacent_legs["drt_number"],
+                (drt_adjacent_legs["leg_number"] == drt_adjacent_legs["drt_number"]),
+                (drt_adjacent_legs["leg_number"] < drt_adjacent_legs["drt_number"]),
+                (drt_adjacent_legs["leg_number"] > drt_adjacent_legs["drt_number"]),
             ],
             ["direct", "before", "after"],
         )
 
-        # Last step is to group by mode and order and then count
+        # Rename pt lines        
+        if self._line_renamer is not None:
+            if isinstance(self._line_renamer, Callable):
+                drt_adjacent_legs["line_id"] = drt_adjacent_legs.apply(lambda row: self._line_renamer(row["line_id"], row["mode"]), axis=1)
+            elif isinstance(self._line_renamer, dict):
+                drt_adjacent_legs["line_id"] = drt_adjacent_legs["line_id"].replace(self._line_renamer)
+            else:
+                raise ValueError(f"`line_renamer` must be of type Callable or dict, not {type(self._line_renamer)}")
+
+        if agg_modes_ruleset is not None:
+                drt_adjacent_legs["mode"] = drt_adjacent_legs["mode"].replace(
+                    self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
+                )
+
+        # Last step is to group by mode, line and order and then count
         drt_intermodal = (
-            drt_adjacent_legs.groupby(["mode", "order"]).size().reset_index(name="n")
+            drt_adjacent_legs
+            .fillna("EMPTY")
+            .replace(self._settings['drt_mode'], "EMPTY")
+            .groupby(["mode", "line_id", "order"]).size().reset_index(name="n")
         )
+        drt_intermodal = drt_intermodal.replace("EMPTY", None)
 
         return drt_intermodal
-
-    # TODO: Intermodal ratio of drt and pt (travel time, distance)

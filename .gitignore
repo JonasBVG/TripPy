@@ -13,4 +13,3 @@ reports/*
 *.docx
 *.pyc
 .mypy_cache
-TripPy/trippy_test.ipynb

@@ -16,10 +16,17 @@ class DRTScenario(Scenario):
         legs_df: pd.DataFrame | None = None,
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
         network_df: gpd.GeoDataFrame | None = None,
-        line_renamer: Callable | dict | None = None
+        line_renamer: Callable | dict | None = None,
     ):
         super().__init__(
-            code, name, description, trips_df, legs_df, links_df, network_df, line_renamer
+            code,
+            name,
+            description,
+            trips_df,
+            legs_df,
+            links_df,
+            network_df,
+            line_renamer,
         )
         self.fleet_size = fleet_size
 
@@ -122,14 +129,19 @@ class DRTScenario(Scenario):
         # TODO: Returns the travel time stats only for drt legs (not intermodal trips i.e. drt+pt combined)
         raise NotImplementedError
 
-    def get_drt_intermodal_analysis(self, agg_modes_ruleset: str | None = None,):
+    def get_drt_intermodal_analysis(
+        self,
+        agg_modes_ruleset: str | None = None,
+    ):
         # TODO: Docstring
 
         self._require_table("trips_df", ["trip_id", "legs_count"])
         self._require_table("legs_df", ["mode", "line_id"])
 
         if "contains_drt" in list(self._trips_df.columns):
-            drt_trip_ids = self._trips_df[self._trips_df["contains_drt"]]["trip_id"].unique()
+            drt_trip_ids = self._trips_df[self._trips_df["contains_drt"]][
+                "trip_id"
+            ].unique()
         else:
             drt_trip_ids = list(
                 self._legs_df[self._legs_df["mode"] == self._settings["drt_mode"]][
@@ -145,9 +157,9 @@ class DRTScenario(Scenario):
         drt_legs_no_walk["leg_number"] = (
             drt_legs_no_walk.groupby("trip_id").cumcount() + 1
         )
-        drt_legs_no_walk["legs_count"] = (
-            drt_legs_no_walk.groupby("trip_id")["leg_number"].transform("max")
-        )
+        drt_legs_no_walk["legs_count"] = drt_legs_no_walk.groupby("trip_id")[
+            "leg_number"
+        ].transform("max")
 
         # First step is to find the number of the drt leg for each trip and to add legs_count
         drt_numbers = (
@@ -185,46 +197,100 @@ class DRTScenario(Scenario):
             ["direct", "before", "after"],
         )
 
-        # Rename pt lines        
+        # Rename pt lines
         if self._line_renamer is not None:
             if isinstance(self._line_renamer, Callable):
-                drt_adjacent_legs["line_id"] = drt_adjacent_legs.apply(lambda row: self._line_renamer(row["line_id"], row["mode"]), axis=1)
+                drt_adjacent_legs["line_id"] = drt_adjacent_legs.apply(
+                    lambda row: self._line_renamer(row["line_id"], row["mode"]), axis=1
+                )
             elif isinstance(self._line_renamer, dict):
-                drt_adjacent_legs["line_id"] = drt_adjacent_legs["line_id"].replace(self._line_renamer)
+                drt_adjacent_legs["line_id"] = drt_adjacent_legs["line_id"].replace(
+                    self._line_renamer
+                )
             else:
-                raise ValueError(f"`line_renamer` must be of type Callable or dict, not {type(self._line_renamer)}")
+                raise ValueError(
+                    f"`line_renamer` must be of type Callable or dict, not {type(self._line_renamer)}"
+                )
 
         if agg_modes_ruleset is not None:
-                drt_adjacent_legs["mode"] = drt_adjacent_legs["mode"].replace(
-                    self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
-                )
+            drt_adjacent_legs["mode"] = drt_adjacent_legs["mode"].replace(
+                self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
+            )
 
         # Last step is to group by mode, line and order and then count
         drt_intermodal = (
-            drt_adjacent_legs
-            .fillna("EMPTY")
-            .replace(self._settings['drt_mode'], "EMPTY")
-            .groupby(["mode", "line_id", "order"]).size().reset_index(name="n")
+            drt_adjacent_legs.fillna("EMPTY")
+            .replace(self._settings["drt_mode"], "EMPTY")
+            .groupby(["mode", "line_id", "order"])
+            .size()
+            .reset_index(name="n")
         )
         drt_intermodal = drt_intermodal.replace("EMPTY", None)
 
         return drt_intermodal
-    
-    def get_pooling_rate(self) -> float:
+
+    def get_pooling_share(self) -> float:
         """
-        Get the DRT pooling rate across the day (person km / vehicle km)
+        Get the DRT person km/vehicle km ratio across the day (person km / vehicle km)
         ---
         """
         df_modal_split = self.get_modal_split(split_type="performance")
         try:
-            person_km = df_modal_split[df_modal_split["mode"] == self._settings["drt_mode"]]["n"].values[0]
-        except IndexError:
-            raise ValueError("No legs with DRT mode `" + self._settings["drt_mode"] + "` could be found. Make sure there are DRT legs in the legs_df and setting `drt_mode` is correctly specified")
-        
+            person_km = df_modal_split[
+                df_modal_split["mode"] == self._settings["drt_mode"]
+            ]["n"].values[0]
+        except IndexError as exc:
+            raise ValueError(
+                "No legs with DRT mode `"
+                + self._settings["drt_mode"]
+                + "` could be found. Make sure there are DRT legs in the legs_df and setting `drt_mode` is correctly specified"
+            ) from exc
+
         df_veh_km = self.get_vehicle_km()
         try:
-            vehicle_km = df_veh_km[df_veh_km["mode"] == self._settings["drt_mode"]]["n"].values[0]
-        except IndexError:
-            raise ValueError("No vehicles with DRT mode `" + self._settings["drt_mode"] + "` could be found on any of the links. Make sure there are DRT vehicles routed on the links in the links_df and setting `drt_mode` is correctly specified")
+            vehicle_km = df_veh_km[df_veh_km["mode"] == self._settings["drt_mode"]][
+                "n"
+            ].values[0]
+        except IndexError as exc:
+            raise ValueError(
+                "No vehicles with DRT mode `"
+                + self._settings["drt_mode"]
+                + "` could be found on any of the links. Make sure there are DRT vehicles routed on the links in the links_df and setting `drt_mode` is correctly specified"
+            ) from exc
 
         return person_km / vehicle_km
+
+    def get_drt_occupancy_day(
+        self,
+        time_interval: int = 60,
+    ) -> pd.DataFrame:
+        """
+        Get a `DataFrame` containing the number of vehicles with a certain number of passengers currently aboard for each time bin across the day
+        ---
+        Arguments:
+        - `time_interval`: number of seconds (!) one time bin consists of
+
+        Columns of `DataFrame` returned:
+        - `time_index`: index of the time interval bin. Example: if `time_interval` = 60 secs, there will be indices 0-86399
+        - `occupancy`: number of passengers in the drt vehicle
+        - `n`: number of vehicles entering at least one link in the respective time interval
+
+        Notes:
+        This is technically the number of unique passengers in the time bin so with larger time intervals or on rare occasions occupancy could exceed capacity and might not always be 100% correct.
+        Also, if a vehicle is occupied but does not enter a new link during the time bin it will not be counted.
+        """
+        df_drt_links = self._links_df[
+            self._links_df["mode"] == self._settings["drt_mode"]
+        ].copy()
+        df_drt_links["time_index"] = df_drt_links["link_enter_time"] // time_interval
+        df_persons_per_vehicle_per_bin = (
+            df_drt_links.groupby(["time_index", "vehicle_id"])["person_id"].nunique()
+            - 1
+        ).reset_index()
+        df_occupancy = (
+            df_persons_per_vehicle_per_bin.groupby(["time_index", "person_id"])
+            .size()
+            .reset_index()
+        )
+
+        return df_occupancy

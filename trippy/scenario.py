@@ -265,6 +265,7 @@ class Scenario:
         Columns of `DataFrame` returned:
         - `mode`: mode of transport
         - `n`: number of trips OR number of person kilometers travelled
+        - `share`: share of all trips or person kilometers travelled
         """
 
         if split_type == "volume":
@@ -284,7 +285,7 @@ class Scenario:
                 .size()
                 .reset_index(name="n")
                 .rename(columns={"main_mode": "mode"})
-                .assign(prc=lambda x: (x["n"] / x["n"].sum()))
+                .assign(share=lambda x: (x["n"] / x["n"].sum()))
             )
         elif split_type == "performance":
             self._require_table("legs_df", ["mode"])
@@ -302,7 +303,7 @@ class Scenario:
                 df_filtered.groupby("mode")
                 .agg(n=("routed_distance", "sum"))
                 .reset_index()
-                .assign(prc=lambda x: (x["n"] / x["n"].sum()))
+                .assign(share=lambda x: (x["n"] / x["n"].sum()))
             )
         else:
             raise ValueError(

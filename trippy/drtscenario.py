@@ -8,7 +8,7 @@ from typing import Callable
 class DRTScenario(Scenario):
     def __init__(
         self,
-        code: str | None = None,
+        code: str,
         name: str | None = "my scenario",
         description: str | None = None,
         fleet_size: int = 0,
@@ -271,12 +271,12 @@ class DRTScenario(Scenario):
         - `time_interval`: number of seconds (!) one time bin consists of
 
         Columns of `DataFrame` returned:
-        - `time_index`: index of the time interval bin. Example: if `time_interval` = 60 secs, there will be indices 0-86399
+        - `time_index`: index of the time interval bin. Example: if `time_interval` = 60 secs, there will be indices 0-1439 (with a day of 24 hours)
         - `occupancy`: number of passengers in the drt vehicle
         - `n`: number of vehicles entering at least one link in the respective time interval
 
         Notes:
-        This is technically the number of unique passengers in the time bin so with larger time intervals or on rare occasions occupancy could exceed capacity and might not always be 100% correct.
+        This is technically the number of unique passengers per vehicle in the time bin so with larger time intervals or on rare occasions, occupancy could exceed capacity and might not always be 100% correct.
         Also, if a vehicle is occupied but does not enter a new link during the time bin it will not be counted.
         """
         df_drt_links = self._links_df[
@@ -290,7 +290,8 @@ class DRTScenario(Scenario):
         df_occupancy = (
             df_persons_per_vehicle_per_bin.groupby(["time_index", "person_id"])
             .size()
-            .reset_index()
+            .reset_index(name="n")
+            .rename(columns={"person_id": "occupancy"})
         )
 
         return df_occupancy

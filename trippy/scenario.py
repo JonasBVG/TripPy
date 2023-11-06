@@ -17,7 +17,7 @@ class Scenario:
 
     def __init__(
         self,
-        code: str | None = None,
+        code: str,
         name: str | None = "my scenario",
         description: str | None = None,
         trips_df: pd.DataFrame | None = None,

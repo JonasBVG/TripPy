@@ -1,4 +1,3 @@
-import os
 import json
 import numpy as np
 import pandas as pd
@@ -60,20 +59,25 @@ class Scenario:
             # TODO: for release: replace with {}
             "mode_aggregation_rulesets": {
                 "all_pt": {
-                    "100": "pt",
-                    "300": "pt",
-                    "400": "pt",
-                    "500": "pt",
-                    "600": "pt",
-                    "700": "pt",
-                    "800": "pt",
-                    "BVB10": "pt",
-                    "BVB10M": "pt",
-                    "BVT30": "pt",
-                    "BVT30M": "pt",
-                    "BVB10X": "pt",
-                    "BVU20": "pt",
-                    "BVF100": "pt",
+                    "100": "ÖV",
+                    "300": "ÖV",
+                    "400": "ÖV",
+                    "500": "ÖV",
+                    "600": "ÖV",
+                    "700": "ÖV",
+                    "800": "ÖV",
+                    "BVB10": "ÖV",
+                    "BVB10M": "ÖV",
+                    "BVT30": "ÖV",
+                    "BVT30M": "ÖV",
+                    "BVB10X": "ÖV",
+                    "BVU20": "ÖV",
+                    "BVF100": "ÖV",
+                    "bike": "Fahrrad",
+                    "car": "MIV",
+                    "ride": "Mitfahren",
+                    "walk": "Laufen",
+                    "drt": "DRT",
                 },
                 "vsys": {
                     "100": "Bus",
@@ -90,6 +94,11 @@ class Scenario:
                     "BVB10X": "Bus",
                     "BVU20": "U-Bahn",
                     "BVF100": "Fähre",
+                    "bike": "Fahrrad",
+                    "car": "MIV",
+                    "ride": "Mitfahren",
+                    "walk": "Laufen",
+                    "drt": "DRT",
                 },
             },
         }
@@ -580,6 +589,25 @@ class Scenario:
 
         raise NotImplementedError
 
+    def get_trip_locations(
+        self,
+        direction: str = "origin",
+    ) -> gpd.GeoDataFrame:
+        """
+        Get a `GeoDataFrame` containing the origin or destination points of trips
+        ---
+        """
+        gdf_trips = gpd.GeoDataFrame(
+            self._trips_df,
+            geometry=gpd.points_from_xy(
+                x=self._trips_df["from_x" if direction == "origin" else "to_x"],
+                y=self._trips_df["from_y" if direction == "origin" else "to_y"],
+                crs="EPSG:25833",
+            ),
+        )
+
+        return gdf_trips
+
     def get_zone_trips(
         self,
         agg_gdf: gpd.GeoDataFrame,
@@ -608,7 +636,7 @@ class Scenario:
         """
         # NOT TESTED YET
         # TODO: Consider renaming agg_gdf to something like "zones" or "zones_gdf"
-        # TODO: Separate aggreations for origin / destination
+        # TODO: Separate aggreations for origin / destination # DONE?
 
         self._require_table("trips_df", ["from_x", "from_y", "to_x", "to_y"])
 

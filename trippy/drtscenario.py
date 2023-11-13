@@ -12,6 +12,7 @@ class DRTScenario(Scenario):
         name: str | None = "my scenario",
         description: str | None = None,
         fleet_size: int = 0,
+        operating_zone: gpd.GeoDataFrame | None = None,
         trips_df: pd.DataFrame | None = None,
         legs_df: pd.DataFrame | None = None,
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
@@ -29,6 +30,7 @@ class DRTScenario(Scenario):
             line_renamer,
         )
         self.fleet_size = fleet_size
+        self.operating_zone = operating_zone
 
     def get_n_drt_rides(self) -> int:
         """
@@ -295,3 +297,24 @@ class DRTScenario(Scenario):
         )
 
         return df_occupancy
+    
+    def get_drt_leg_locations(
+            self,
+            direction: str = "origin",
+    ) -> gpd.GeoDataFrame:
+        """
+        Get a `GeoDataFrame` containing the origin or destination points of all DRT trips
+        ---
+        """
+        gdf_legs_onlyDRT = self._legs_df[self._legs_df["mode"] == self._settings["drt_mode"]]
+
+        gdf_legs = gpd.GeoDataFrame(
+            gdf_legs_onlyDRT,
+            geometry=gpd.points_from_xy(
+                x=gdf_legs_onlyDRT["from_x" if direction == "origin" else "to_x"],
+                y=gdf_legs_onlyDRT["from_y" if direction == "origin" else "to_y"],
+                crs="EPSG:25833",
+            ),
+        )
+
+        return gdf_legs

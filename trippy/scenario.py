@@ -55,7 +55,7 @@ class Scenario:
                 "BVF100",
             ],
             # TODO: for release: replace with ".*"
-            "legs_table_person_id_filter": "^((?!^pt).)*$",  # only selects person_ids that do not start with "pt"
+            "person_id_filter": "^((?!^pt).)*$",  # only selects person_ids that do not start with "pt"
             # TODO: for release: replace with {}
             "mode_aggregation_rulesets": {
                 "all_pt": {
@@ -211,26 +211,44 @@ class Scenario:
 
         return self._trips_df["person_id"].unique().size
 
-    def get_person_km(self) -> float:
+    def get_person_km(
+        self, exclude_modes: list[str] = [], agg_modes_ruleset: str | None = None
+    ) -> pd.DataFrame:
         """
-        Get the total number of person kilometers performed
+        Get a `DataFrame` containing the total number of person kilometers performed per mode
         ---
+        Arguments:
+        - `exclude_modes`: specify a list of mode names to be disregarded. Note that these modes have to be supplied in the form they exist in the `links_df`, not any aggregated form
+        - `agg_modes_ruleset`: which ruleset to use to aggregate the modes in the `links_df`. Has to be configured in the settings first (key `mode_aggregation_rulesets`)
+
+        Columns of `DataFrame` returned:
+        - `mode`: mode of transport
+        - `n`: number of person kilometers performed
         """
 
-        self._require_table("legs_df", ["person_id", "routed_distance"])
+        self._require_table("legs_df", ["person_id", "routed_distance", "mode"])
 
-        # filter out ptDriverAgents
-        pkm = (
-            self._legs_df["routed_distance"]
-            # //[self._legs_df["person_id"]
-            # match a regex string defined in settings(e.g. no ptDriverAgents)
-            # // .str.match(self._settings["legs_table_person_id_filter"])][
-            # //     "routed_distance"
-            # // ]
-            .sum()
+        df_legs_without_excluded_modes = self._legs_df.copy()[
+            ~self._legs_df["mode"].isin(exclude_modes)
+        ]
+
+        if agg_modes_ruleset is not None:
+            df_legs_without_excluded_modes["mode"] = df_legs_without_excluded_modes[
+                "mode"
+            ].replace(self._settings["mode_aggregation_rulesets"][agg_modes_ruleset])
+
+        df_pkm = (
+            df_legs_without_excluded_modes
+            .groupby("mode")
+            .agg(n=("routed_distance", "sum"))
+            .reset_index()
+            .assign(n=lambda x: x["n"]/1000) # m -> km
+            
+            # please do not delete comment:
+            # // df["person_id"].str.match(self._settings["legs_table_person_id_filter"])
         )
 
-        return pkm
+        return df_pkm
 
     def get_trips_day(
         self, time_interval: int = 60, time_col: str = "start_time"
@@ -391,10 +409,8 @@ class Scenario:
 
         Columns of `DataFrame` returned:
         - `mode`: mode of transport
-        - `n`: Number of vehicle kilometers performed
+        - `n`: number of vehicle kilometers performed
         """
-
-        # TODO: filter out ptDriverAgents
 
         self._require_table("links_df", ["vehicle_id", "mode"])
 
@@ -408,7 +424,8 @@ class Scenario:
             ].replace(self._settings["mode_aggregation_rulesets"][agg_modes_ruleset])
 
         df_veh_km = (
-            df_links_without_excluded_modes.groupby("mode")
+            df_links_without_excluded_modes.drop_duplicates(subset=["vehicle_id"])
+            .groupby("mode")
             .agg(n=("distance_travelled", "sum"))
             .reset_index()
         )
@@ -852,6 +869,9 @@ class Scenario:
     def get_line_links(self, lines: str | list[str] | None = None) -> gpd.GeoDataFrame:
         # get links a line travels on as gdf
         raise NotImplementedError
+
+    def get_settings(self) -> dict:
+        return self._settings
 
     @staticmethod
     def calc_descriptive_statistics(

@@ -30,11 +30,11 @@ class DRTScenario(Scenario):
             line_renamer,
         )
         self.fleet_size = fleet_size
-        self.operating_zone = operating_zone
+        self._operating_zone = operating_zone.to_crs("epsg:4326")
 
     def get_n_drt_rides(self) -> int:
         """
-        Get the total number or trips containing drt
+        Get the total number of trips containing drt
         """
         self._require_table("trips_df")
 
@@ -231,7 +231,7 @@ class DRTScenario(Scenario):
 
         return drt_intermodal
 
-    def get_pooling_share(self) -> float:
+    def get_mean_drt_occupancy(self) -> float:
         """
         Get the DRT person km/vehicle km ratio across the day (person km / vehicle km)
         ---
@@ -278,16 +278,18 @@ class DRTScenario(Scenario):
         - `n`: number of vehicles entering at least one link in the respective time interval
 
         Notes:
-        This is technically the number of unique passengers per vehicle in the time bin so with larger time intervals or on rare occasions, occupancy could exceed capacity and might not always be 100% correct.
+        This is technically the number of unique passengers per vehicle in the time bin, so with larger time intervals or on rare occasions, occupancy could exceed capacity and might not always be 100% correct.
         Also, if a vehicle is occupied but does not enter a new link during the time bin it will not be counted.
         """
+        self._require_table("links_df", ["link_enter_time", "person_id", "vehicle_id"])
+
         df_drt_links = self._links_df[
             self._links_df["mode"] == self._settings["drt_mode"]
         ].copy()
         df_drt_links["time_index"] = df_drt_links["link_enter_time"] // time_interval
         df_persons_per_vehicle_per_bin = (
             df_drt_links.groupby(["time_index", "vehicle_id"])["person_id"].nunique()
-            - 1
+            - 1 # account for driver
         ).reset_index()
         df_occupancy = (
             df_persons_per_vehicle_per_bin.groupby(["time_index", "person_id"])
@@ -318,3 +320,6 @@ class DRTScenario(Scenario):
         )
 
         return gdf_legs
+    
+    def get_operating_zone(self) -> gpd.GeoDataFrame:
+        return self._operating_zone

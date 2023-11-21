@@ -43,6 +43,9 @@ class Visualizer:
                 )
             )
         return colors
+    
+    def add_comparison(self, comparison: Comparison):
+        self._comparison = comparison
 
     def plot_modal_split(
         self,
@@ -200,7 +203,7 @@ class Visualizer:
         ]
         mode_indices_to_colors = {
             i: self.__hex_to_rgba(color[1:], 0.5) for i, color in enumerate(mode_colors)
-        }  # 50% opacity = 7F hex code suffix #! NO
+        }
 
         # Dict to replace modes with numbers
         number_labels = {mode: i for i, mode in enumerate(all_modes)}
@@ -232,62 +235,89 @@ class Visualizer:
         )
 
         return fig
-    def __map_locations(self, orig_gdf: gpd.GeoDataFrame, dest_gdf: gpd.GeoDataFrame):
+
+    def __map_locations(
+        self,
+        orig_gdf: gpd.GeoDataFrame,
+        dest_gdf: gpd.GeoDataFrame,
+        zones: gpd.GeoDataFrame | None = None,
+    ):
         orig_gdf = orig_gdf.to_crs("EPSG:4326")
         dest_gdf = dest_gdf.to_crs("EPSG:4326")
-        
+
         m = folium.Map(
             location=[orig_gdf["geometry"].y.mean(), orig_gdf["geometry"].x.mean()],
             zoom_start=12,
+            zoomDelta=0.5,
         )
-        
-        # TODO: Instead of this use regular LayerControl and names of the layers themselves, no FeatureGroups
-        start_hm_feature_group = folium.FeatureGroup(name="Startorte: Heatmap")
-        start_pts_feature_group = folium.FeatureGroup(name="Startorte: Punkte")
-        end_hm_feature_group = folium.FeatureGroup(name="Zielorte: Heatmap", show=False)
-        end_pts_feature_group = folium.FeatureGroup(name="Zielorte: Punkte", show=False)
 
-        heatmap_orig = HeatMap(
-            name = "Heatmap: Trip start points",
-            data=list(zip(orig_gdf["geometry"].y, orig_gdf["geometry"].x)),
-            min_opacity=0.2
-        )
-        heatmap_dest = HeatMap(
-            name = "Heatmap: Trip end points",
-            data=list(zip(dest_gdf["geometry"].y, dest_gdf["geometry"].x)),
-            min_opacity=0.2
-        )
-        heatmap_orig.add_to(start_hm_feature_group)
-        heatmap_dest.add_to(end_hm_feature_group)
-
-        marker_cluster_orig = FastMarkerCluster(
-            data=list(zip(orig_gdf["geometry"].y, orig_gdf["geometry"].x))
-        )
-        marker_cluster_dest = FastMarkerCluster(
-            data=list(zip(dest_gdf["geometry"].y, dest_gdf["geometry"].x))
-        )
-        marker_cluster_orig.add_to(start_pts_feature_group)
-        marker_cluster_dest.add_to(end_pts_feature_group)
-
-        m.add_child(start_pts_feature_group)
-        m.add_child(start_hm_feature_group)
-        m.add_child(end_pts_feature_group)
-        m.add_child(end_hm_feature_group)
-
-        GroupedLayerControl(
-            groups={"Ebenen": [start_hm_feature_group, start_pts_feature_group, end_hm_feature_group, end_pts_feature_group]},
-            collapsed=False,
-            exclusive_groups=False
+        folium.TileLayer(
+            "https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png",
+            name="ÖPNV Map",
+            show=False,
+            attr='Map <a href="https://memomaps.de/">memomaps.de</a> <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        ).add_to(m)
+        folium.TileLayer(
+            "CartoDB dark_matter",
+            name="Dark Map",
+            show=False,
         ).add_to(m)
 
+        heatmap_orig = HeatMap(
+            name="Startorte: Heatmap",
+            data=list(zip(orig_gdf["geometry"].y, orig_gdf["geometry"].x)),
+            min_opacity=0.2,
+        )
+        heatmap_dest = HeatMap(
+            name="Zielorte: Heatmap",
+            data=list(zip(dest_gdf["geometry"].y, dest_gdf["geometry"].x)),
+            min_opacity=0.2,
+            show=False,
+        )
+
+        marker_cluster_orig = FastMarkerCluster(
+            name="Startorte: Punkte",
+            data=list(zip(orig_gdf["geometry"].y, orig_gdf["geometry"].x)),
+            options=dict(singleMarkerMode=True),
+        )
+        marker_cluster_dest = FastMarkerCluster(
+            name="Zielorte: Punkte",
+            data=list(zip(dest_gdf["geometry"].y, dest_gdf["geometry"].x)),
+            show=False,
+            options=dict(singleMarkerMode=True),
+        )
+
+        if zones is not None:
+            zones_poly = folium.GeoJson(
+                name="Gebiet",
+                data=zones["geometry"],
+                style_function=lambda feature: {
+                    "fillColor": self.__hex_to_rgba("000000", 0),
+                    "color": "#0313fc",
+                    "weight": 3,
+                },
+            )
+            zones_poly.add_to(m)
+
+        heatmap_orig.add_to(m)
+        marker_cluster_orig.add_to(m)
+        heatmap_dest.add_to(m)
+        marker_cluster_dest.add_to(m)
+
+        folium.LayerControl(collapsed=False, sortLayers=False).add_to(m)
+
         return m
-    
+
     def map_drt_ride_locations(self):
         # TODO: Docstring
         orig_legs = self._scenario.get_drt_leg_locations()
         dest_legs = self._scenario.get_drt_leg_locations(direction="destination")
 
-        m = self.__map_locations(orig_gdf=orig_legs, dest_gdf=dest_legs)
+        m = self.__map_locations(
+            orig_gdf=orig_legs,
+            dest_gdf=dest_legs,
+            zones=self._scenario.get_operating_zone(),
+        )
 
         return m
 
@@ -295,19 +325,48 @@ class Visualizer:
         # TODO: Docstring
         orig_trips = self._scenario.get_trip_locations()
         orig_trips = orig_trips[
-            orig_trips["main_mode"] == self._scenario._settings["drt_mode"]
+            orig_trips["main_mode"] == self._scenario.get_settings()["drt_mode"]
         ]
         dest_trips = self._scenario.get_trip_locations(direction="destination")
         dest_trips = dest_trips[
-            dest_trips["main_mode"] == self._scenario._settings["drt_mode"]
+            dest_trips["main_mode"] == self._scenario.get_settings()["drt_mode"]
         ]
 
         m = self.__map_locations(orig_gdf=orig_trips, dest_gdf=dest_trips)
 
         return m
 
+    def map_zone(self):
+        # TODO: Docstring
+        m = folium.Map(
+            tiles="https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png",
+            attr='Map <a href="https://memomaps.de/">memomaps.de</a> <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            location=[
+                self._scenario.get_operating_zone().centroid.y.mean(),
+                self._scenario.get_operating_zone().centroid.x.mean(),
+            ],
+            zoom_start=11,
+            zoom_control=False,
+            scrollWheelZoom=False,
+            dragging=False
+        )
+
+        zones_poly = folium.GeoJson(
+                name="Gebiet",
+                data=self._scenario.get_operating_zone()["geometry"],
+                style_function=lambda feature: {
+                    "fillColor": "#0313fc",
+                    "color": "#0313fc",
+                    "weight": 5,
+                },
+            )
+        zones_poly.add_to(m)
+
+        return m
+
     @classmethod
-    def __hex_to_rgba(cls, hex: str, opacity: float = 1):
+    def __hex_to_rgba(cls, hex_code: str, opacity: float = 1) -> str:
+        '''Use without a # in front of the hex color code'''
         return "rgba" + str(
-            tuple(int(hex[i : i + 2], 16) for i in (0, 2, 4)) + (opacity,)
+            tuple(int(hex_code[i : i + 2], 16) for i in (0, 2, 4)) + (opacity,)
         )

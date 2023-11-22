@@ -9,9 +9,9 @@ class DRTScenario(Scenario):
     def __init__(
         self,
         code: str,
+        fleet_size: int,
         name: str | None = "my scenario",
         description: str | None = None,
-        fleet_size: int = 0,
         operating_zone: gpd.GeoDataFrame | None = None,
         trips_df: pd.DataFrame | None = None,
         legs_df: pd.DataFrame | None = None,
@@ -60,9 +60,7 @@ class DRTScenario(Scenario):
         """
         Get a `DataFrame` containing a collection of travel time statistics for DRT
         ---
-
         Columns of `DataFrame` returned:
-        - `travel_part`: part of travel time the minutes value stands for. Example: 'waiting'
         - `mean`: mean number of minutes
         - `median`: median number of minutes
         - `min`: minimum number of minutes
@@ -71,28 +69,24 @@ class DRTScenario(Scenario):
         - `p_95`: ninety-fifth percentile
         - `std`: standard deviation
         """
-        self._require_table("legs_df")
+        df_ttime = self.get_travel_time_stats(stats_for="legs")
+        df_drt: pd.DataFrame = df_ttime[
+            (df_ttime["mode"] == self._settings["drt_mode"])
+            & (df_ttime["travel_part"] == "waiting_time")
+        ]
+        df_drt.drop(columns=["mode", "travel_part"])
 
-        df_ttime = Scenario.calc_descriptive_statistics(
-            self._legs_df[self._legs_df["mode"] == "drt"]
-            .melt(
-                id_vars=["trip_id", "leg_id"],
-                var_name="travel_part",
-                value_name="minutes",
-            )
-            .groupby("travel_part"),
-            "minutes",
-        )
-
-        return df_ttime
+        return df_drt
 
     def get_eta_day(self, time_interval: int | None = None) -> pd.DataFrame:
         """
         Get a `DataFrame` containing DRT ETA statistics per time_index.
         ---
+        Arguments:
+        - `time_interval`: number of minutes one time bin consists of
 
         Columns of `DataFrame` returned:
-        - `time_index`: the time index calculated using _add_time_indices
+        - `time_index`: index of the time interval bin. Example: if `time_interval` was set to 60 mins, there will be indices 0-23 (with 24 hours)
         - `mean`: mean number of minutes
         - `median`: median number of minutes
         - `min`: minimum number of minutes
@@ -103,13 +97,11 @@ class DRTScenario(Scenario):
         """
         # TODO: implement custom quantiles
 
-        #! Should only give back ETA, not all travel_parts
-        # TODO: Maybe add back ability to get only one statistic -> also implement in Scenario.get_travel_time_stats()
-
         self._require_table("legs_df")
 
         df_with_time_index = self._add_time_indices(
-            self._legs_df[self._legs_df["mode"] == "drt"], time_interval=time_interval
+            self._legs_df[self._legs_df["mode"] == self._settings["drt_mode"]],
+            time_interval=time_interval,
         ).melt(
             id_vars=["trip_id", "leg_id", "time_index"],
             var_name="travel_part",
@@ -126,10 +118,6 @@ class DRTScenario(Scenario):
         )
 
         return df_ttime
-
-    def get_drt_travel_time_stats(self):
-        # TODO: Returns the travel time stats only for drt legs (not intermodal trips i.e. drt+pt combined)
-        raise NotImplementedError
 
     def get_drt_intermodal_analysis(
         self,
@@ -289,7 +277,7 @@ class DRTScenario(Scenario):
         df_drt_links["time_index"] = df_drt_links["link_enter_time"] // time_interval
         df_persons_per_vehicle_per_bin = (
             df_drt_links.groupby(["time_index", "vehicle_id"])["person_id"].nunique()
-            - 1 # account for driver
+            - 1  # account for driver
         ).reset_index()
         df_occupancy = (
             df_persons_per_vehicle_per_bin.groupby(["time_index", "person_id"])
@@ -299,16 +287,18 @@ class DRTScenario(Scenario):
         )
 
         return df_occupancy
-    
+
     def get_drt_leg_locations(
-            self,
-            direction: str = "origin",
+        self,
+        direction: str = "origin",
     ) -> gpd.GeoDataFrame:
         """
         Get a `GeoDataFrame` containing the origin or destination points of all DRT trips
         ---
         """
-        gdf_legs_onlyDRT = self._legs_df[self._legs_df["mode"] == self._settings["drt_mode"]]
+        gdf_legs_onlyDRT = self._legs_df[
+            self._legs_df["mode"] == self._settings["drt_mode"]
+        ]
 
         gdf_legs = gpd.GeoDataFrame(
             gdf_legs_onlyDRT,
@@ -320,6 +310,6 @@ class DRTScenario(Scenario):
         )
 
         return gdf_legs
-    
+
     def get_operating_zone(self) -> gpd.GeoDataFrame:
         return self._operating_zone

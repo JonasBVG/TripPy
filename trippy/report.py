@@ -63,15 +63,15 @@ class Report:
         ), "Scenario in this Visualizer is not a DRTScenario"
 
         self.__add_operator_perspective_analysis()
-        # self.__add_passenger_perspective_analysis() #! Not yet implemented
+        self.__add_passenger_perspective_analysis()
         # self.__add_holistic_perspective_analysis() #! Not yet implemented
-        
 
     def __add_operator_perspective_analysis(self) -> None:
         template_operator_stats = self._env.get_template("drt_operator_stats.jinja")
         template_occupancy = self._env.get_template("drt_occupancy.jinja")
         template_heatmap = self._env.get_template("drt_heatmap.jinja")
 
+        # KPIs
         fleet_size = self._scenario.fleet_size
         n_drt_rides = self._scenario.get_n_drt_rides()
         drt_occupancy = self._scenario.get_mean_drt_occupancy()
@@ -125,8 +125,67 @@ class Report:
         self._add_block("DRT-Betreibersicht", content)
 
     def __add_passenger_perspective_analysis(self) -> None:
-        raise NotImplementedError
-    
+        # TODO: Histograms (also todo in visualizer)
+
+        template_eta = self._env.get_template("drt_eta.jinja")
+        template_travel_time = self._env.get_template("drt_travel_time.jinja")
+        template_travel_distance = self._env.get_template("drt_travel_distance.jinja")
+        # template_access_egress = self._env.get_template("drt_access_egress.jinja")
+
+        content = ""
+
+        # ETA module
+        df_eta = self._scenario.get_eta()
+        df_eta_html = df_eta.melt(
+            value_vars=df_eta.columns, var_name="ETA", value_name="Minuten"
+        ).to_html()
+        fig_eta_html = self._visualizer.plot_eta_day().to_html()
+
+        content += template_eta.render(plot_eta=fig_eta_html, table_eta=df_eta_html)
+
+        # travel time module
+        df_travel_time = self._scenario.get_travel_time_stats(stats_for="legs")
+        df_travel_time_drt = df_travel_time[
+            (df_travel_time["mode"] == self._scenario.get_setting("drt_mode"))
+            & (df_travel_time["travel_part"] == "travel_time")
+        ].drop(columns=["mode", "travel_part"])
+        df_travel_time_drt_html = df_travel_time_drt.melt(
+            value_vars=df_travel_time_drt.columns,
+            var_name="Fahrtzeit",
+            value_name="Minuten",
+        ).to_html()
+
+        content += template_travel_time.render(
+            table_travel_time=df_travel_time_drt_html
+        )
+
+        # travel distance module
+        df_travel_distance = self._scenario.get_travel_distance_stats(stats_for="legs")
+        df_travel_distance_drt = df_travel_distance[
+            df_travel_distance["mode"] == self._scenario.get_setting("drt_mode")
+        ].drop(columns=["mode"])
+        df_travel_distance_drt_html = df_travel_distance_drt.melt(
+            value_vars=df_travel_distance_drt.columns,
+            var_name="Fahrtdistanz",
+            value_name="Kilometer",
+        )
+        df_travel_distance_drt_html["Kilometer"] = (
+            df_travel_distance_drt_html["Kilometer"] / 1000
+        )
+        df_travel_distance_drt_html = df_travel_distance_drt_html.to_html()
+
+        content += template_travel_distance.render(
+            table_travel_distance=df_travel_distance_drt_html
+        )
+
+        # access/egress module
+        #! Problem: This method currently return access/egress distances for the whole trip
+        #! including potential pt legs in the same trip if it is intermodal.
+        # TODO: Need a dedicated DRTScenario version of this that is based on legs -> more complicated
+        # df_access_egress = self._scenario.get_access_egress_distances()
+
+        self._add_block("Kund*innen-Sicht", content)
+
     def __add_holistic_perspective_analysis(self) -> None:
         # gesamtverkehrsplanerisch
         raise NotImplementedError

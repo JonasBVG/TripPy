@@ -43,7 +43,7 @@ class Visualizer:
                 )
             )
         return colors
-    
+
     def add_comparison(self, comparison: Comparison):
         self._comparison = comparison
 
@@ -82,6 +82,9 @@ class Visualizer:
             else None,
             text="share_display",
         )
+
+        fig = self.__style_fig(fig, "", "Anteil", x_grid=False)
+
         fig.update_traces(textfont_size=14, marker=dict(line=dict(width=0)))
         fig.update_layout(uniformtext_minsize=14, uniformtext_mode="show")
 
@@ -107,9 +110,11 @@ class Visualizer:
             ],
         )
 
+        fig = self.__style_fig(fig, None, None)
+
         return fig
 
-    def plot_drt_occupancy(self, time_interval=60) -> go.Figure:
+    def plot_drt_occupancy(self, time_interval: int = 60) -> go.Figure:
         """
         Get a `plotly.graph_objects.Figure` stacked area plot showing occupancy of DRT vehicles across the day
         ---
@@ -117,11 +122,11 @@ class Visualizer:
         - `time_interval`: number of seconds (!) one time bin consists of
         """
 
-        # TODO: Reverse categories (PAX). This is harder than it should be...
-
         df_occupancy = self._scenario.get_drt_occupancy_day(
             time_interval=time_interval
         ).sort_values("occupancy", ascending=False)
+
+        df_occupancy["time_index"] = df_occupancy["time_index"] * (time_interval / 60)
 
         fig = px.area(
             df_occupancy,
@@ -134,6 +139,10 @@ class Visualizer:
             },
         )
         fig.for_each_trace(lambda trace: trace.update(fillcolor=trace.line.color))
+
+        fig = self.__style_fig(
+            fig, x_title="Uhrzeit (Stunde)", y_title="Anzahl Fahrzeuge"
+        )
 
         return fig
 
@@ -233,6 +242,66 @@ class Visualizer:
                 )
             ]
         )
+
+        fig = self.__style_fig(fig, x_title=None, y_title=None)
+
+        return fig
+
+    def plot_eta_day(self, time_interval: int = 60) -> go.Figure:
+        # TODO: Docstring
+
+        df_eta_day = self._scenario.get_eta_day(time_interval)
+        df_eta_day.iloc[:, 1:] = df_eta_day.iloc[:, 1:].apply(lambda x: x / 60)
+        df_eta_day["time_index"] = df_eta_day["time_index"] * (
+            time_interval / 60
+        )  # transform to hours
+
+        fig = go.Figure()
+        # first add max value line
+        fig.add_trace(
+            go.Scatter(
+                x=df_eta_day["time_index"],
+                y=df_eta_day["p_95"],
+                fill=None,
+                mode="lines",
+                line_color="lightgrey",
+                showlegend=False,
+            )
+        )
+        # then add min value line and fill between the two
+        fig.add_trace(
+            go.Scatter(
+                x=df_eta_day["time_index"],
+                y=df_eta_day["p_5"],
+                fill="tonexty",
+                mode="lines",
+                line_color="lightgrey",
+                name="5- bis 95-Perzentil",
+            )
+        )
+        # finally add mean line and median line
+        fig.add_trace(
+            go.Scatter(
+                x=df_eta_day["time_index"],
+                y=df_eta_day["mean"],
+                fill=None,
+                mode="lines",
+                line_color="blue",
+                name="Durchschnitt",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df_eta_day["time_index"],
+                y=df_eta_day["median"],
+                fill=None,
+                mode="lines",
+                line_color="orange",
+                name="Median",
+            )
+        )
+
+        fig = self.__style_fig(fig, x_title="Uhrzeit [Stunde]", y_title="ETA [min]")
 
         return fig
 
@@ -348,25 +417,52 @@ class Visualizer:
             zoom_start=11,
             zoom_control=False,
             scrollWheelZoom=False,
-            dragging=False
+            dragging=False,
         )
 
         zones_poly = folium.GeoJson(
-                name="Gebiet",
-                data=self._scenario.get_operating_zone()["geometry"],
-                style_function=lambda feature: {
-                    "fillColor": "#0313fc",
-                    "color": "#0313fc",
-                    "weight": 5,
-                },
-            )
+            name="Gebiet",
+            data=self._scenario.get_operating_zone()["geometry"],
+            style_function=lambda feature: {
+                "fillColor": "#0313fc",
+                "color": "#0313fc",
+                "weight": 5,
+            },
+        )
         zones_poly.add_to(m)
 
         return m
 
-    @classmethod
-    def __hex_to_rgba(cls, hex_code: str, opacity: float = 1) -> str:
-        '''Use without a # in front of the hex color code'''
+    @staticmethod
+    def __hex_to_rgba(hex_code: str, opacity: float = 1) -> str:
+        """Use without a # in front of the hex color code"""
         return "rgba" + str(
             tuple(int(hex_code[i : i + 2], 16) for i in (0, 2, 4)) + (opacity,)
         )
+
+    @staticmethod
+    def __style_fig(
+        fig: go.Figure,
+        x_title: str | None = "x",
+        y_title: str | None = "y",
+        x_grid: bool = True,
+        y_grid: bool = True,
+        bg_transparent: bool = False,
+    ):
+        fig = fig.update_layout(
+            xaxis_title=x_title,
+            yaxis_title=y_title,
+            font=dict(family="TransitBackNeg-Normal"),
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+        )
+
+        if bg_transparent:
+            fig.update_layout(
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            )
+
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor="lightgrey")
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="lightgrey")
+
+        return fig

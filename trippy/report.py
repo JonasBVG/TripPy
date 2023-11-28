@@ -11,9 +11,12 @@ from .visualizer import Visualizer
 class Report:
     def __init__(
         self,
+        title: str = "My Report",
         scenario: Scenario | DRTScenario | None = None,
         comparison: Comparison | None = None,
     ) -> None:
+        self.title = title
+
         self._scenario = scenario
         self._comparison = comparison
 
@@ -122,7 +125,7 @@ class Report:
             + template_heatmap.render(map_od=map_od)
         )
 
-        self._add_block("DRT-Betreibersicht", content)
+        self._add_block("Betreibersicht", content)
 
     def __add_passenger_perspective_analysis(self) -> None:
         # TODO: Histograms (also todo in visualizer)
@@ -139,9 +142,9 @@ class Report:
         df_eta_html = df_eta.melt(
             value_vars=df_eta.columns, var_name="ETA", value_name="Minuten"
         ).to_html()
-        fig_eta_html = self._visualizer.plot_eta_day().to_html()
+        fig_eta_day_html = self._visualizer.plot_eta_day().to_html()
 
-        content += template_eta.render(plot_eta=fig_eta_html, table_eta=df_eta_html)
+        content += template_eta.render(plot_eta_day=fig_eta_day_html, table_eta=df_eta_html)
 
         # travel time module
         df_travel_time = self._scenario.get_travel_time_stats(stats_for="legs")
@@ -203,11 +206,11 @@ class Report:
 
         content = template.render(plot_intermodal=pio.to_html(fig_intermodal))
 
-        self._add_block("DRT-Intermodalität", content)
+        self._add_block("Intermodalität", content)
 
     def compile_html(self, filepath: str = "reports/report.html"):
         template = self._env.get_template("report_structure.jinja")
-        html_res = template.render(blocks=self._blocks)
+        html_res = template.render(blocks=self._blocks, title=self.title)
 
         if not os.path.exists(os.path.dirname(filepath)):
             print(

@@ -1,6 +1,6 @@
 *
 !/trippy/*
-# Note that all folder in root except TripPy are ignored and have to be included explicitly with '!'
+# Note that all folders in root except TripPy are ignored and have to be included explicitly with '!'
 !trippy/
 !tables_specification.json
 __pycache__
@@ -12,4 +12,5 @@ reports/*
 .vscode
 *.docx
 *.pyc
+*.svg
 .mypy_cache

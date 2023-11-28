@@ -126,7 +126,7 @@ class Visualizer:
             time_interval=time_interval
         ).sort_values("occupancy", ascending=False)
 
-        df_occupancy["time_index"] = df_occupancy["time_index"] * (time_interval / 60)
+        df_occupancy["time_index"] = df_occupancy["time_index"] * (time_interval / (60*60))
 
         fig = px.area(
             df_occupancy,

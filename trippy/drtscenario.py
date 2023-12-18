@@ -23,6 +23,7 @@ class DRTScenario(Scenario):
             code,
             name,
             description,
+            operating_zone,
             trips_df,
             legs_df,
             links_df,
@@ -30,7 +31,6 @@ class DRTScenario(Scenario):
             line_renamer,
         )
         self.fleet_size = fleet_size
-        self._operating_zone = operating_zone.to_crs("epsg:4326")
 
     def get_n_drt_rides(self) -> int:
         """
@@ -58,7 +58,7 @@ class DRTScenario(Scenario):
 
     def get_eta(self) -> pd.DataFrame:
         """
-        Get a `DataFrame` containing a collection of travel time statistics for DRT
+        Get a `DataFrame` containing ETA statistics for DRT
         ---
         Columns of `DataFrame` returned:
         - `mean`: mean number of minutes
@@ -227,7 +227,7 @@ class DRTScenario(Scenario):
         df_modal_split = self.get_modal_split(split_type="performance")
         try:
             person_km = df_modal_split[
-                df_modal_split["mode"] == self._settings["drt_mode"]
+                (df_modal_split["mode"] == self._settings["drt_mode"])
             ]["n"].values[0]
         except IndexError as exc:
             raise ValueError(
@@ -310,6 +310,3 @@ class DRTScenario(Scenario):
         )
 
         return gdf_legs
-
-    def get_operating_zone(self) -> gpd.GeoDataFrame:
-        return self._operating_zone

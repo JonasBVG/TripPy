@@ -20,6 +20,7 @@ class Scenario:
         code: str,
         name: str | None = "my scenario",
         description: str | None = None,
+        operating_zone: gpd.GeoDataFrame | None = None,
         trips_df: pd.DataFrame | None = None,
         legs_df: pd.DataFrame | None = None,
         links_df: pd.DataFrame | gpd.GeoDataFrame | None = None,
@@ -35,11 +36,15 @@ class Scenario:
         self.name = name
         self.description = description
         self._line_renamer = line_renamer
+        self._operating_zone = operating_zone
+        if self._operating_zone is not None:
+            self._operating_zone = self._operating_zone.to_crs("epsg:4326")
 
         self._settings = {
             "default_time_agg_interval": 60,
             "drt_mode": "drt",
             "walk_mode": "walk",
+            "crs": "epsg:25833",
             "pt_modes": [
                 "100",
                 "300",
@@ -112,14 +117,10 @@ class Scenario:
         self._links_df: pd.DataFrame | gpd.GeoDataFrame = None
         self._network_df: gpd.GeoDataFrame = None
 
-        if trips_df is not None:
-            self.add_data(trips_df=trips_df)
-        if legs_df is not None:
-            self.add_data(legs_df=legs_df)
-        if links_df is not None:
-            self.add_data(links_df=links_df)
-        if network_df is not None:
-            self.add_data(network_df=network_df)
+        self.add_data(trips_df=trips_df)
+        self.add_data(legs_df=legs_df)
+        self.add_data(links_df=links_df)
+        self.add_data(network_df=network_df)
 
     def add_data(self, **kwargs) -> None:
         """
@@ -130,41 +131,116 @@ class Scenario:
         - `legs_df`: a `pandas` `DataFrame` containing at least one leg
         - `links_df`: a `pandas` `DataFrame` or a `geopandas` `GeoDataFrame` containing at least one link
         - `network_df`: a `GeoDataFrame` containing at least one link
+        - `operating_zone`: a `GeoDataFrame` containing exactly one polygon which defines the operating zone
         """
 
-        for key, value in kwargs.items():
-            if key == "trips_df" and self._check_specification_compliance(
-                value, "trips_df"
-            ):
-                self._trips_df = value
-                if "trip_id" not in list(self._trips_df.columns):
-                    self._trips_df["trip_id"] = self._trips_df.index.astype(str)
+        # TODO: It would probably make sense to create a (more versatile) method to also add ids/other information from a shape containing more than 1 polygon
+        # TODO: ... for things like aggregating to zones instead of supplying the shape each time when using such a method
 
-            elif key == "legs_df" and self._check_specification_compliance(
-                value, "legs_df"
-            ):
-                self._legs_df = value
-                if "leg_id" not in list(self._legs_df.columns):
-                    self._legs_df["leg_id"] = self._legs_df.index.astype(str)
-                if "leg_number" not in list(self._legs_df.columns):
-                    self._legs_df["leg_number"] = (
-                        self._legs_df.groupby("trip_id").cumcount() + 1
+        def add_operating_zone_to_trips(trips_df: pd.DataFrame) -> pd.DataFrame:
+            """
+            Add information on origin and destination of trips using operating_zone
+            ---
+            Adds these columns:
+            `starts_in_zone`: `True` if origin lies inside the operating zone, else `False`
+            `ends_in_zone`: `True` if destination lies inside the operating zone, else `False`
+            `relation_type`: "inland" if origin and destination lie inside the operating zone, "od" if either origin or destination falls inside the operating zone and "outside" if neither do
+            """
+            try:
+                self._require_table("trips_df", ["from_x", "from_y", "to_x", "to_y"])
+            except AssertionError:
+                warnings.warn(
+                    UserWarning(
+                        "Could not add information on the operating zone to the trips_df because columns defining trip locations were missing (`from_x`, `from_y`, `to_x`, `to_y`)"
                     )
+                )
 
-            elif key == "links_df" and self._check_specification_compliance(
-                value, "links_df"
-            ):
-                self._links_df = value
-                if "link_id" not in list(self._links_df.columns):
-                    self._links_df["link_id"] = self._links_df.index.astype(str)
+            for col in ("relation_type", "starts_in_zone", "ends_in_zone"):
+                if col in trips_df.columns:
+                    trips_df = trips_df.drop(columns=col)
 
-            elif key == "network_df" and self._check_specification_compliance(
-                value, "network_df"
-            ):
-                self._network_df = value
+            gdf_points_from = (
+                gpd.GeoDataFrame(
+                    trips_df,
+                    geometry=gpd.points_from_xy(trips_df["from_x"], trips_df["from_y"]),
+                )
+                .set_crs(self._settings["crs"])
+                .to_crs(4326)
+            )
+            gdf_points_to = (
+                gpd.GeoDataFrame(
+                    trips_df,
+                    geometry=gpd.points_from_xy(trips_df["to_x"], trips_df["to_y"]),
+                )
+                .set_crs(self._settings["crs"])
+                .to_crs(4326)
+            )
 
-            else:
-                raise TypeError(f"Unrecognized argument: {key}")
+            # Check if 'from' and 'to' points are inside the polygon
+            gdf_points_from["starts_in_zone"] = gdf_points_from["geometry"].within(
+                self._operating_zone.geometry.iloc[0]
+            )
+            gdf_points_to["ends_in_zone"] = gdf_points_to["geometry"].within(
+                self._operating_zone.geometry.iloc[0]
+            )
+
+            # Merge the results back into the original DataFrame
+            df = pd.concat(
+                [
+                    trips_df,
+                    gdf_points_from["starts_in_zone"],
+                    gdf_points_to["ends_in_zone"],
+                ],
+                axis=1,
+            )
+            df["relation_type"] = "outside"
+            df.loc[df["starts_in_zone"] | df["ends_in_zone"], "relation_type"] = "od"
+            df.loc[
+                df["starts_in_zone"] & df["ends_in_zone"], "relation_type"
+            ] = "inland"
+
+            return df
+
+        for key, value in kwargs.items():
+            if value is not None:
+                if key == "trips_df" and self._check_specification_compliance(
+                    value, "trips_df"
+                ):
+                    self._trips_df = value
+                    if "trip_id" not in list(self._trips_df.columns):
+                        self._trips_df["trip_id"] = self._trips_df.index.astype(str)
+
+                    if self._operating_zone is not None:
+                        self._trips_df = add_operating_zone_to_trips(self._trips_df)
+                elif key == "operating_zone":
+                    self._operating_zone = value.to_crs(4326)
+                    self._trips_df = add_operating_zone_to_trips(self._trips_df)
+
+                elif key == "legs_df" and self._check_specification_compliance(
+                    value, "legs_df"
+                ):
+                    self._legs_df = value
+                    if "leg_id" not in list(self._legs_df.columns):
+                        self._legs_df["leg_id"] = self._legs_df.index.astype(str)
+                    if "leg_number" not in list(self._legs_df.columns):
+                        self._legs_df["leg_number"] = (
+                            self._legs_df.groupby("trip_id").cumcount() + 1
+                        )
+
+                elif key == "links_df" and self._check_specification_compliance(
+                    value, "links_df"
+                ):
+                    self._links_df = value
+                    if "link_id" not in list(self._links_df.columns):
+                        self._links_df["link_id"] = self._links_df.index.astype(str)
+
+                elif key == "network_df" and self._check_specification_compliance(
+                    value, "network_df"
+                ):
+                    self._network_df = value
+
+                else:
+                    raise TypeError(f"Unrecognized argument: {key}")
 
     def get_trips_df(self) -> pd.DataFrame:
         """
@@ -314,23 +390,31 @@ class Scenario:
                 .assign(share=lambda x: (x["n"] / x["n"].sum()))
             )
         elif split_type == "performance":
-            self._require_table("legs_df", ["mode"])
+            # This is a pretty thin wrapper around get_person_km and only adds a share column
 
-            df_filtered = self._legs_df.copy()[
-                ~self._legs_df["mode"].isin(exclude_modes)
-            ]
+            df_split = self.get_person_km(
+                exclude_modes=exclude_modes, agg_modes_ruleset=agg_modes_ruleset
+            ).assign(share=lambda x: (x["n"] / x["n"].sum()))
 
-            if agg_modes_ruleset is not None:
-                df_filtered["mode"] = df_filtered["mode"].replace(
-                    self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
-                )
+            ## This was unneccessarily duplicated code:
+            # // self._require_table("legs_df", ["mode"])
 
-            df_split = (
-                df_filtered.groupby("mode")
-                .agg(n=("routed_distance", "sum"))
-                .reset_index()
-                .assign(share=lambda x: (x["n"] / x["n"].sum()))
-            )
+            # // df_filtered = self._legs_df.copy()[
+            # //     ~self._legs_df["mode"].isin(exclude_modes)
+            # // ]
+
+            # // if agg_modes_ruleset is not None:
+            # //     df_filtered["mode"] = df_filtered["mode"].replace(
+            # //         self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
+            # //     )
+
+            # // df_split = (
+            # //     df_filtered.groupby("mode")
+            # //     .agg(n=("routed_distance", "sum"))
+            # //     .reset_index()
+            # //     .assign(n=lambda x: x["n"] / 1000)
+            # //     .assign(share=lambda x: (x["n"] / x["n"].sum()))
+            # // )
         else:
             raise ValueError(
                 "Argument `split_type` has to be either 'volume' or 'performance'"
@@ -423,11 +507,14 @@ class Scenario:
             ].replace(self._settings["mode_aggregation_rulesets"][agg_modes_ruleset])
 
         df_veh_km = (
-            df_links_without_excluded_modes.drop_duplicates(subset=["vehicle_id"])
+            df_links_without_excluded_modes.drop_duplicates(
+                subset=["vehicle_id", "link_id", "link_enter_time"]
+            )
             .groupby("mode")
             .agg(n=("distance_travelled", "sum"))
             .reset_index()
         )
+        df_veh_km["n"] = df_veh_km["n"] / 1000
 
         return df_veh_km
 
@@ -1102,3 +1189,6 @@ class Scenario:
                 ), f"One of the columns {cols} does not exist in the scenario's `links_df`"
         else:
             raise ValueError(f"Wrong `df_name`: {df_name}")
+
+    def get_operating_zone(self) -> gpd.GeoDataFrame:
+        return self._operating_zone

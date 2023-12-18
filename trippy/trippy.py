@@ -121,15 +121,19 @@ def convert_senozon_to_trippy(df: pd.DataFrame, table_type="tripTable"):
         raise NotImplementedError
     return df.rename(columns=rename_dict)
 
-def create_drt_report(trip_table_scenario: pd.DataFrame,
-                       leg_table_scenario: pd.DataFrame, 
-                       link_table_scenario: pd.DataFrame,
-                        trip_table_base: pd.DataFrame,
-                        leg_table_base: pd.DataFrame,
-                        link_table_base: pd.DataFrame):
-    """
-    Takes trip, leg and link tables and creates a report about the usage and performance of an DRT-System
-    
-    """
-    raise NotImplementedError
-
+def format_number(num: float|int, percent: bool = False, dec_places: int = 0) -> str:
+        """
+        Returns a number as a string formatted with German number notation using dot as thousands separator and comma as decimal separator
+        ---
+        Arguments:
+        - num: the number to format
+        - percent: whether to use percent notation num*100%
+        - dec_places: the number of decimal places after the comma to round to
+        """
+        if percent:
+            format_str = "{:,." + str(dec_places) + "%}"
+        else:
+            format_str = "{:,." + str(dec_places) + "f}"
+            
+        formatted_num = format_str.format(num).replace(".", "_").replace(",", ".").replace("_", ",")
+        return formatted_num

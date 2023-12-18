@@ -57,22 +57,34 @@ class Visualizer:
         Get a `plotly.graph_objects.Figure` bar plot showing the modal split of a scenario or a comparison
         ---
         Arguments:
-        - `split_type`: 'volume', 'performance'. Using 'volume' will return the number of trips based on their `main_mode` and needs `trips_df`, using 'performance' will return person kilometers based on the `legs_df`
+        - `split_type`: 'volume', 'performance' or 'both'. Using 'volume' will return the number of trips based on their `main_mode` and needs `trips_df`, using 'performance' will return person kilometers based on the `legs_df`. Using 'both' will display the stacked barplots side-by-side
         - `exclude_modes`: specify a list of mode names to be disregarded in the modal split. Note that these modes have to be supplied in the form they exist in the `trips_df`, not any aggregated form
         - `agg_modes`: whether to aggregate the modes in the `trips_df` and `legs_df` according to the assignment in the scenario's/comparison's settings (key `mode_aggregation_rules`)
         """
+        if split_type == "both":
+            df_modal_split_volume = self._scenario.get_modal_split(
+                "volume", exclude_modes, agg_modes_ruleset
+            )
+            df_modal_split_volume["x"] = "Verkehrsaufkommen"
+            df_modal_split_performance = self._scenario.get_modal_split(
+                "performance", exclude_modes, agg_modes_ruleset
+            )
+            
+            df_modal_split_performance["x"] = "Verkehrsleistung"
+            df_modal_split = pd.concat([df_modal_split_volume, df_modal_split_performance])
+        else:
+            df_modal_split = self._scenario.get_modal_split(
+                split_type, exclude_modes, agg_modes_ruleset
+            )
+            df_modal_split["x"] = ""
 
-        df_modal_split = self._scenario.get_modal_split(
-            split_type, exclude_modes, agg_modes_ruleset
-        )
-        df_modal_split["x_dummy"] = ""
         df_modal_split["share_display"] = df_modal_split.apply(
             lambda x: f"{x['mode']}: {x['share']*100:1.1f}%", axis=1
         )
 
         fig = px.bar(
             df_modal_split,
-            x="x_dummy",
+            x="x",
             y="share",
             color="mode",
             color_discrete_map=self.__colors["colorsets"][
@@ -82,8 +94,11 @@ class Visualizer:
             else None,
             text="share_display",
         )
-
-        fig = self.__style_fig(fig, "", "Anteil", x_grid=False)
+    	
+        if split_type == "both":
+            fig = self.__style_fig(fig, "Modal-Split-Typ", "Anteil", x_grid=False)
+        else:
+            fig = self.__style_fig(fig, "", "Anteil", x_grid=False)
 
         fig.update_traces(textfont_size=14, marker=dict(line=dict(width=0)))
         fig.update_layout(uniformtext_minsize=14, uniformtext_mode="show")
@@ -407,7 +422,7 @@ class Visualizer:
 
     def map_zone(self):
         # TODO: Docstring
-        m = folium.Map(
+        m_zone = folium.Map(
             tiles="https://tileserver.memomaps.de/tilegen/{z}/{x}/{y}.png",
             attr='Map <a href="https://memomaps.de/">memomaps.de</a> <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             location=[
@@ -429,9 +444,9 @@ class Visualizer:
                 "weight": 5,
             },
         )
-        zones_poly.add_to(m)
+        zones_poly.add_to(m_zone)   
 
-        return m
+        return m_zone
 
     @staticmethod
     def __hex_to_rgba(hex_code: str, opacity: float = 1) -> str:

@@ -7,7 +7,9 @@ from .drtscenario import DRTScenario
 class Comparison:
     # TODO: Docstring
     def __init__(
-        self, base_scenario: Scenario | DRTScenario, policy_scenarios: Scenario | DRTScenario | list[Scenario|DRTScenario]
+        self,
+        base_scenario: Scenario | DRTScenario,
+        policy_scenarios: Scenario | DRTScenario | list[Scenario | DRTScenario],
     ):
         # TODO: Better make this configurable:
         self._settings = base_scenario._settings
@@ -34,17 +36,33 @@ class Comparison:
                 ) from exc
         else:
             policy_scenario = list(self._policy_scenarios.values())[0]
-            print(f"Using scenario with code '{policy_scenario.code}'")
+            print(
+                f"Using policy scenario with code '{policy_scenario.code}' for comparison (modal shift)"
+            )
 
-        policy_scenario._require_table("trips_df", ["trip_id", "person_id", "main_mode"])
-        self._base_scenario._require_table("trips_df", ["trip_id", "person_id", "main_mode"])
+        policy_scenario._require_table(
+            "trips_df", ["trip_id", "person_id", "main_mode"]
+        )
+        self._base_scenario._require_table(
+            "trips_df", ["trip_id", "person_id", "main_mode"]
+        )
 
         df_modal_shift = (
-            policy_scenario._trips_df[["trip_id", "person_id", "main_mode"]]
+            policy_scenario._trips_df.assign(
+                trip_ordinality=policy_scenario._trips_df.groupby(
+                    "person_id"
+                ).cumcount()
+            )[["trip_id", "person_id", "main_mode", "trip_ordinality"]]
             .merge(
-                self._base_scenario._trips_df[["trip_id", "person_id", "main_mode"]],
+                (
+                    self._base_scenario._trips_df.assign(
+                        trip_ordinality=self._base_scenario._trips_df.groupby(
+                            "person_id"
+                        ).cumcount()
+                    )[["trip_id", "person_id", "main_mode", "trip_ordinality"]]
+                ),
                 how="left",
-                on=["trip_id", "person_id"],
+                on=["trip_ordinality", "person_id"],
                 suffixes=["_policy", "_base"],
             )
             .replace(

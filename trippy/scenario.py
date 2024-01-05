@@ -1,9 +1,9 @@
 import json
 import warnings
+from typing import Callable
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-from typing import Callable
 
 
 class Scenario:

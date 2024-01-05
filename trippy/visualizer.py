@@ -1,6 +1,7 @@
 import json
 import warnings
 import folium
+import re
 import pandas as pd
 import geopandas as gpd
 import plotly.express as px
@@ -69,9 +70,11 @@ class Visualizer:
             df_modal_split_performance = self._scenario.get_modal_split(
                 "performance", exclude_modes, agg_modes_ruleset
             )
-            
+
             df_modal_split_performance["x"] = "Verkehrsleistung"
-            df_modal_split = pd.concat([df_modal_split_volume, df_modal_split_performance])
+            df_modal_split = pd.concat(
+                [df_modal_split_volume, df_modal_split_performance]
+            )
         else:
             df_modal_split = self._scenario.get_modal_split(
                 split_type, exclude_modes, agg_modes_ruleset
@@ -94,7 +97,7 @@ class Visualizer:
             else None,
             text="share_display",
         )
-    	
+
         if split_type == "both":
             fig = self.__style_fig(fig, "Modal-Split-Typ", "Anteil", x_grid=False)
         else:
@@ -141,7 +144,9 @@ class Visualizer:
             time_interval=time_interval
         ).sort_values("occupancy", ascending=False)
 
-        df_occupancy["time_index"] = df_occupancy["time_index"] * (time_interval / (60*60))
+        df_occupancy["time_index"] = df_occupancy["time_index"] * (
+            time_interval / (60 * 60)
+        )
 
         fig = px.area(
             df_occupancy,
@@ -183,6 +188,7 @@ class Visualizer:
             }
         )
 
+        # filter modes if demanded
         if only_from_modes is not None:
             if isinstance(only_from_modes, str):
                 df_modal_shift = df_modal_shift[
@@ -206,8 +212,11 @@ class Visualizer:
             else:
                 raise ValueError("`only_to_modes` has to be a string or a list")
 
+        # Prepare the data for plotting
+
         # The nodes (ie. the modes) have to be unique so we have to rename them
-        # to distinguish between base case and policy case
+        # to distinguish between base case and policy case. This is only needed
+        # for generating ids, for the labels we can use the original version
         df_modal_shift["target"] = df_modal_shift["main_mode_policy"] + " (policy)"
         df_modal_shift["source"] = df_modal_shift["main_mode_base"] + " (base)"
 
@@ -238,7 +247,11 @@ class Visualizer:
         )
 
         nodes = dict(
-            pad=5, thickness=20, line={"width": 0}, label=all_modes, color=mode_colors
+            pad=5,
+            thickness=20,
+            line={"width": 0},
+            label=all_modes_raw,
+            color=mode_colors,
         )
         links = dict(
             source=df_modal_shift["source"],
@@ -405,20 +418,31 @@ class Visualizer:
 
         return m
 
-    def map_trip_locations(self):
+    def map_trip_locations(self, only_modes: list[str] = None):
         # TODO: Docstring
         orig_trips = self._scenario.get_trip_locations()
-        orig_trips = orig_trips[
-            orig_trips["main_mode"] == self._scenario.get_settings()["drt_mode"]
-        ]
         dest_trips = self._scenario.get_trip_locations(direction="destination")
-        dest_trips = dest_trips[
-            dest_trips["main_mode"] == self._scenario.get_settings()["drt_mode"]
-        ]
+        if only_modes is not None:
+            orig_trips = orig_trips[orig_trips["main_mode"].isin(only_modes)]
+            dest_trips = dest_trips[dest_trips["main_mode"].isin(only_modes)]
 
         m = self.__map_locations(orig_gdf=orig_trips, dest_gdf=dest_trips)
 
         return m
+
+    def map_od(
+        self,
+        only_modes: list[str] | None = None,
+        agg_gdf: gpd.GeoDataFrame | None = None,
+        grid_size: float = 0
+    ):
+        # TODO: Docstring
+        # (grid size for a rectangular grid in case we don't have a agg_gdf on hand)
+        # use those methods:
+        # - Scenario.get_zone_trips_day() -> for cloropleth background (trips per zone)
+        # - Scenario.get_relations_agg() -> for the od data, aggregated onto zones
+
+        raise NotImplementedError
 
     def map_zone(self):
         # TODO: Docstring
@@ -444,7 +468,7 @@ class Visualizer:
                 "weight": 5,
             },
         )
-        zones_poly.add_to(m_zone)   
+        zones_poly.add_to(m_zone)
 
         return m_zone
 

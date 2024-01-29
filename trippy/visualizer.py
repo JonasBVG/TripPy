@@ -439,7 +439,7 @@ class Visualizer:
         # TODO: Docstring
         # (grid size for a rectangular grid in case we don't have a agg_gdf on hand)
         # use those methods:
-        # - Scenario.get_zone_trips_day() -> for cloropleth background (trips per zone)
+        # - Scenario.get_zone_trips() -> for cloropleth background (trips per zone)
         # - Scenario.get_relations_agg() -> for the od data, aggregated onto zones
 
         raise NotImplementedError

@@ -113,13 +113,13 @@ class Report:
         drt_occupancy = self._scenario.get_mean_drt_occupancy()
         all_veh_km = self._scenario.get_vehicle_km()
         drt_veh_km = all_veh_km[
-            all_veh_km["mode"] == self._scenario.get_settings()["drt_mode"]
+            all_veh_km["mode"] == self._scenario.get_setting("drt_mode")
         ]["n"].values[0]
         drt_km_per_veh = drt_veh_km / fleet_size
         # TODO: km empty, km occupied
         all_person_km = self._scenario.get_person_km()
         drt_person_km = all_person_km[
-            all_person_km["mode"] == self._scenario.get_settings()["drt_mode"]
+            all_person_km["mode"] == self._scenario.get_setting("drt_mode")
         ]["n"].values[0]
 
         # TODO: Make this more elegant and dynamic

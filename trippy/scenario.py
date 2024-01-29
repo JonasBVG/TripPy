@@ -134,75 +134,10 @@ class Scenario:
         - `operating_zone`: a `GeoDataFrame` containing exactly one polygon which defines the operating zone
         """
 
-        # TODO: It would probably make sense to create a (more versatile) method to also add ids/other information from a shape containing more than 1 polygon
-        # TODO: ... for things like aggregating to zones instead of supplying the shape each time when using such a method
-
-        def add_operating_zone_to_trips(trips_df: pd.DataFrame) -> pd.DataFrame:
-            """
-            Add information on origin and destination of trips using operating_zone
-            ---
-            Adds these columns:
-            `starts_in_zone`: `True` if origin lies inside the operating zone, else `False`
-            `ends_in_zone`: `True` if destination lies inside the operating zone, else `False`
-            `relation_type`: "inland" if origin and destination lie inside the operating zone, "od" if either origin or destination falls inside the operating zone and "outside" if neither do
-            """
-            try:
-                self._require_table("trips_df", ["from_x", "from_y", "to_x", "to_y"])
-            except AssertionError:
-                warnings.warn(
-                    UserWarning(
-                        "Could not add information on the operating zone to the trips_df because columns defining trip locations were missing (`from_x`, `from_y`, `to_x`, `to_y`)"
-                    )
-                )
-
-            for col in ("relation_type", "starts_in_zone", "ends_in_zone"):
-                if col in trips_df.columns:
-                    trips_df = trips_df.drop(columns=col)
-
-            gdf_points_from = (
-                gpd.GeoDataFrame(
-                    trips_df,
-                    geometry=gpd.points_from_xy(trips_df["from_x"], trips_df["from_y"]),
-                )
-                .set_crs(self._settings["crs"])
-                .to_crs(4326)
-            )
-            gdf_points_to = (
-                gpd.GeoDataFrame(
-                    trips_df,
-                    geometry=gpd.points_from_xy(trips_df["to_x"], trips_df["to_y"]),
-                )
-                .set_crs(self._settings["crs"])
-                .to_crs(4326)
-            )
-
-            # Check if 'from' and 'to' points are inside the polygon
-            gdf_points_from["starts_in_zone"] = gdf_points_from["geometry"].within(
-                self._operating_zone.geometry.iloc[0]
-            )
-            gdf_points_to["ends_in_zone"] = gdf_points_to["geometry"].within(
-                self._operating_zone.geometry.iloc[0]
-            )
-
-            # Merge the results back into the original DataFrame
-            df = pd.concat(
-                [
-                    trips_df,
-                    gdf_points_from["starts_in_zone"],
-                    gdf_points_to["ends_in_zone"],
-                ],
-                axis=1,
-            )
-            df["relation_type"] = "outside"
-            df.loc[df["starts_in_zone"] | df["ends_in_zone"], "relation_type"] = "od"
-            df.loc[
-                df["starts_in_zone"] & df["ends_in_zone"], "relation_type"
-            ] = "inland"
-
-            return df
-
         for key, value in kwargs.items():
             if value is not None:
+
+                # trips_df
                 if key == "trips_df" and self._check_specification_compliance(
                     value, "trips_df"
                 ):
@@ -210,12 +145,7 @@ class Scenario:
                     if "trip_id" not in list(self._trips_df.columns):
                         self._trips_df["trip_id"] = self._trips_df.index.astype(str)
 
-                    if self._operating_zone is not None:
-                        self._trips_df = add_operating_zone_to_trips(self._trips_df)
-                elif key == "operating_zone":
-                    self._operating_zone = value.to_crs(4326)
-                    self._trips_df = add_operating_zone_to_trips(self._trips_df)
-
+                # legs_df
                 elif key == "legs_df" and self._check_specification_compliance(
                     value, "legs_df"
                 ):
@@ -226,7 +156,22 @@ class Scenario:
                         self._legs_df["leg_number"] = (
                             self._legs_df.groupby("trip_id").cumcount() + 1
                         )
+                    # Rename pt lines:
+                    if self._line_renamer is not None:
+                        if isinstance(self._line_renamer, Callable):
+                            self._legs_df["line_id"] = self._legs_df.apply(
+                                lambda row: self._line_renamer(row["line_id"], row["mode"]), axis=1
+                            )
+                        elif isinstance(self._line_renamer, dict):
+                            self._legs_df["line_id"] = self._legs_df["line_id"].replace(
+                                self._line_renamer
+                            )
+                        else:
+                            raise ValueError(
+                                f"`line_renamer` must be a callable or dict, not {type(self._line_renamer)}"
+                            )
 
+                # links_df
                 elif key == "links_df" and self._check_specification_compliance(
                     value, "links_df"
                 ):
@@ -234,10 +179,15 @@ class Scenario:
                     if "link_id" not in list(self._links_df.columns):
                         self._links_df["link_id"] = self._links_df.index.astype(str)
 
+                # network_df
                 elif key == "network_df" and self._check_specification_compliance(
                     value, "network_df"
                 ):
                     self._network_df = value
+                
+                # operating_zone
+                elif key == "operating_zone":
+                    self._operating_zone = value.to_crs(4326)
 
                 else:
                     raise TypeError(f"Unrecognized argument: {key}")
@@ -844,14 +794,14 @@ class Scenario:
     def get_zone_trips(
         self,
         agg_gdf: gpd.GeoDataFrame,
-        distinguish_modes=True,
+        distinguish_modes: bool =True,
         exclude_modes: list[str] = [],
         agg_modes_ruleset: str | None = None,
         pt_lines: list[str] | None = None,
         direction: str = "origin",
     ) -> gpd.GeoDataFrame:
         """
-        Get a `GeoDataFrame` containing the number of trips originating/ending in specified zones the trips are aggregated to, optionally per mode and only for specified pt lines
+        Get a `GeoDataFrame` containing the number of trips originating/ending in specified zones, optionally per mode and only for those with use of specified pt lines
         ---
         Arguments:
         - `agg_gdf`: multipolygon `GeoDataFrame` containing zones the trips will be aggregated to. Must contain a column called `zone_id`. Will append all feature attributes to the df
@@ -867,7 +817,7 @@ class Scenario:
         - `n_origin`: Number of trips originating from this zone
         - `n_destination`: Number of trips ending in this zone
         """
-        # NOT TESTED YET
+        
         # TODO: Consider renaming agg_gdf to something like "zones" or "zones_gdf"
         # TODO: Separate aggreations for origin / destination # DONE?
 
@@ -883,9 +833,9 @@ class Scenario:
             ),
         )
 
-        # Perform a spatial join to associate each trip with a polygon
+        # Perform a spatial join to associate each trip with a polygon (or nan)
         agg_gdf = agg_gdf.to_crs("EPSG:25833")
-        joined: gpd.GeoDataFrame = gpd.sjoin(
+        gdf_trips_intersected: gpd.GeoDataFrame = gpd.sjoin(
             gdf_trips, agg_gdf, how="left", predicate="within"
         )
 
@@ -902,8 +852,8 @@ class Scenario:
                 ), "To use this functionality, please set `pt_modes` in settings first"
 
                 # filter for trips first that have a non-pt main_mode
-                trips_non_pt = joined[
-                    ~joined["main_mode"].isin(self._settings["pt_modes"])
+                trips_non_pt = gdf_trips_intersected[
+                    ~gdf_trips_intersected["main_mode"].isin(self._settings["pt_modes"])
                 ]
                 # find legs with one of the line_ids to filter for and get corresponding trip ids
                 trip_ids_with_pt_lines = self._legs_df[
@@ -913,15 +863,12 @@ class Scenario:
                 trips_filtered = pd.concat(
                     [
                         trips_non_pt,
-                        joined[joined["trip_id"].isin(trip_ids_with_pt_lines)],
+                        gdf_trips_intersected[gdf_trips_intersected["trip_id"].isin(trip_ids_with_pt_lines)],
                     ]
                 )
-
-                trips_filtered = trips_filtered[
-                    ~trips_filtered["main_mode"].isin(exclude_modes)
-                ]
+                trips_filtered = trips_filtered[~trips_filtered["main_mode"].isin(exclude_modes)]
             else:
-                trips_filtered = joined
+                trips_filtered = gdf_trips_intersected
 
             if agg_modes_ruleset is not None:
                 trips_filtered["main_mode"] = trips_filtered["main_mode"].replace(
@@ -929,20 +876,22 @@ class Scenario:
                 )
 
             counts = (
-                joined.groupby(["zone_id", "mode"])
+                trips_filtered.groupby(["zone_id", "main_mode"])
                 .size()
                 .reset_index(name="n")
-                .pivot(index="zone_id", columns="mode", values="n")
+                .pivot(index="zone_id", columns="main_mode", values="n")
             )
 
         else:
             counts = (
-                joined["zone_id"]
+                gdf_trips_intersected
                 .groupby("zone_id")
                 .size()
                 .reset_index(name="all modes")
             )
 
+        counts = counts.rename(columns={"main_mode": "mode"}).fillna(0)
+        
         return counts
 
     def get_zone_trips_day(
@@ -1085,16 +1034,18 @@ class Scenario:
         # get links a line travels on as gdf
         raise NotImplementedError
 
-    def get_settings(self) -> dict:
-        warnings.warn(
-            "Use Scenario.get_setting(setting) instead", category=DeprecationWarning
-        )
-        return self._settings
-
     def get_setting(self, setting: str):
-        return self._settings[setting]
+        # TODO: Docstring
+        try:
+            val = self._settings[setting]
+        except IndexError as exc:
+            raise ValueError(
+                f"Setting '{setting}' has not been configured/does not exist!"
+            ) from exc
+        return
 
     def set_setting(self, setting: str, value) -> None:
+        # TODO: Docstring, check if setting exists
         self._settings[setting] = value
 
     @staticmethod
@@ -1189,6 +1140,73 @@ class Scenario:
                 ), f"One of the columns {cols} does not exist in the scenario's `links_df`"
         else:
             raise ValueError(f"Wrong `df_name`: {df_name}")
+        
+    def _require_operating_zone_info(self) -> None:
+        """
+        Add information on origin and destination of trips using operating_zone if not already generated
+        ---
+        Adds these columns:
+        `starts_in_zone`: `True` if origin lies inside the operating zone, else `False`
+        `ends_in_zone`: `True` if destination lies inside the operating zone, else `False`
+        `relation_type`: "inland" if origin and destination lie inside the operating zone, "od" if either origin or destination falls inside the operating zone and "outside" if neither do
+        """
+
+        if not "relation_type" in self._trips_df.columns:
+            try:
+                self._require_table("trips_df", ["from_x", "from_y", "to_x", "to_y"])
+            except AssertionError:
+                warnings.warn(
+                    UserWarning(
+                        "Could not add information on the operating zone to the trips_df because columns defining trip locations were missing (`from_x`, `from_y`, `to_x`, `to_y`)"
+                    )
+                )
+
+            for col in ("relation_type", "starts_in_zone", "ends_in_zone"):
+                if col in self._trips_df.columns:
+                    self._trips_df = self._trips_df.drop(columns=col)
+
+            gdf_points_from = (
+                gpd.GeoDataFrame(
+                    self._trips_df,
+                    geometry=gpd.points_from_xy(self._trips_df["from_x"], self._trips_df["from_y"]),
+                )
+                .set_crs(self._settings["crs"])
+                .to_crs(4326)
+            )
+            gdf_points_to = (
+                gpd.GeoDataFrame(
+                    self._trips_df,
+                    geometry=gpd.points_from_xy(self._trips_df["to_x"], self._trips_df["to_y"]),
+                )
+                .set_crs(self._settings["crs"])
+                .to_crs(4326)
+            )
+
+            # Check if 'from' and 'to' points are inside the polygon
+            gdf_points_from["starts_in_zone"] = gdf_points_from["geometry"].within(
+                self._operating_zone.geometry.iloc[0]
+            )
+            gdf_points_to["ends_in_zone"] = gdf_points_to["geometry"].within(
+                self._operating_zone.geometry.iloc[0]
+            )
+
+            # Merge the results back into the original DataFrame
+            df = pd.concat(
+                [
+                    self._trips_df,
+                    gdf_points_from["starts_in_zone"],
+                    gdf_points_to["ends_in_zone"],
+                ],
+                axis=1,
+            )
+            df["relation_type"] = "outside"
+            df.loc[df["starts_in_zone"] | df["ends_in_zone"], "relation_type"] = "od"
+            df.loc[
+                df["starts_in_zone"] & df["ends_in_zone"], "relation_type"
+            ] = "inland"
+
+            self._trips_df = df
+        
 
     def get_operating_zone(self) -> gpd.GeoDataFrame:
         return self._operating_zone

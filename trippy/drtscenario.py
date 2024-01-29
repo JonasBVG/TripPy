@@ -187,21 +187,6 @@ class DRTScenario(Scenario):
             ["direct", "before", "after"],
         )
 
-        # Rename pt lines
-        if self._line_renamer is not None:
-            if isinstance(self._line_renamer, Callable):
-                drt_adjacent_legs["line_id"] = drt_adjacent_legs.apply(
-                    lambda row: self._line_renamer(row["line_id"], row["mode"]), axis=1
-                )
-            elif isinstance(self._line_renamer, dict):
-                drt_adjacent_legs["line_id"] = drt_adjacent_legs["line_id"].replace(
-                    self._line_renamer
-                )
-            else:
-                raise ValueError(
-                    f"`line_renamer` must be of type Callable or dict, not {type(self._line_renamer)}"
-                )
-
         if agg_modes_ruleset is not None:
             drt_adjacent_legs["mode"] = drt_adjacent_legs["mode"].replace(
                 self._settings["mode_aggregation_rulesets"][agg_modes_ruleset]
